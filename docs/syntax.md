@@ -3,7 +3,7 @@
 ```
 Program = [ NewLines ] { Subroutine NewLines } EOF.
 
-Subroutine = 'SUB' IDENT [ '(' ParameterList ')' ] [ 'AS' TypeName ] Sequence 'END' 'SUB'.
+Subroutine = 'SUB' IDENT [ '(' [ ParameterList ] ')' ] [ 'AS' TypeName ] Sequence 'END' 'SUB'.
 
 ParameterList = Parameter { ',' Parameter }.
 Parameter     = IDENT [ '[' ']' ] 'AS' TypeName.
