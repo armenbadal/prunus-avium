@@ -82,6 +82,7 @@ const std::vector<SubroutineSignature>& builtinSignatures()
         {"Print", {{std::nullopt, false}}, std::nullopt, true},
         {"Input", {}, TypeName::Text, true},
         {"NUM", {{TypeName::Text, false}}, TypeName::Real, true},
+        {"SQR", {{TypeName::Real, false}}, TypeName::Real, true},
     };
     return signatures;
 }

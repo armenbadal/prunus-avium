@@ -3,7 +3,7 @@ SUB max(x AS REAL, y AS REAL) AS REAL
   DIM t AS REAL
 
   IF x + y > 0 THEN
-    LET t = "Yes"
+    LET t = 100
   END IF
 
   IF x > y THEN

@@ -1,3 +1,4 @@
+#include "astlisp.hxx"
 #include "parser.hxx"
 #include "semantic.hxx"
 
@@ -56,5 +57,6 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
+    avium::AstLisp{}.emit(program, std::cout);
     return EXIT_SUCCESS;
 }

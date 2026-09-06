@@ -11,5 +11,6 @@ SUB Gcd(x AS REAL, y AS REAL) AS REAL
 END SUB
 
 SUB Main
+    DIM result AS REAL
     LET result = Gcd(18, 192)
 END SUB
