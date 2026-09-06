@@ -8,6 +8,8 @@ add_executable(${PROJECT_NAME}
     src/scanner.cxx
     src/diagnostics.cxx
     src/parser.cxx
+    src/symbols.cxx
+    src/semantic.cxx
     src/astlisp.cxx)
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)
 
