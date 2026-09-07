@@ -70,7 +70,6 @@ private:
     void validateIndex(const Expression::Ptr& index);
     ParameterInfo parameterInfo(const Dim& parameter) const;
 
-    void requireType(const Node& node, TypeName actual, TypeName expected);
     void report(const Node& node, std::string_view message);
 
     SymbolTable& _symbols;

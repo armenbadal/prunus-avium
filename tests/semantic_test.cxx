@@ -263,7 +263,8 @@ TEST_CASE("Semantic analyzer rejects an assignment type mismatch", "[semantic]")
     const auto result = analyze({subroutineWithBody("Main", {declaration, assignment})});
 
     CHECK_FALSE(result.valid);
-    CHECK(result.errors.size() == 1);
+    REQUIRE(result.errors.size() == 1);
+    CHECK(std::get<1>(result.errors.front()) == "'value' փոփոխականին պետք է վերագրվի REAL, բայց ստացվել է TEXT։");
 }
 
 TEST_CASE("Semantic analyzer rejects indexing a scalar assignment target", "[semantic]")
@@ -363,7 +364,8 @@ TEST_CASE("Semantic analyzer rejects invalid unary operands", "[semantic]")
         auto expression = node<Unary>(Operation::Not, node<Number>(1.0, 2), 2);
         const auto result = analyzeExpression(expression, TypeName::Bool);
         CHECK_FALSE(result.valid);
-        CHECK(result.errors.size() == 1);
+        REQUIRE(result.errors.size() == 1);
+        CHECK(std::get<1>(result.errors.front()) == "'NOT' գործողության օպերանդը պետք է լինի BOOL, բայց ստացվել է REAL։");
     }
 
     SECTION("unary minus requires REAL")
@@ -371,8 +373,20 @@ TEST_CASE("Semantic analyzer rejects invalid unary operands", "[semantic]")
         auto expression = node<Unary>(Operation::Sub, node<Text>("text", 2), 2);
         const auto result = analyzeExpression(expression, TypeName::Real);
         CHECK_FALSE(result.valid);
-        CHECK(result.errors.size() == 1);
+        REQUIRE(result.errors.size() == 1);
+        CHECK(std::get<1>(result.errors.front()) == "Ունար '-' գործողության օպերանդը պետք է լինի REAL, բայց ստացվել է TEXT։");
     }
+}
+
+TEST_CASE("Semantic analyzer suppresses a unary type error for an unknown operand", "[semantic]")
+{
+    auto operand = node<Variable>("missing", 2);
+    auto expression = node<Unary>(Operation::Not, operand, 2);
+    const auto result = analyzeExpression(expression, TypeName::Bool);
+
+    CHECK_FALSE(result.valid);
+    REQUIRE(result.errors.size() == 1);
+    CHECK(std::get<1>(result.errors.front()) == "'missing' անունով փոփոխական սահմանված չէ։");
 }
 
 TEST_CASE("Semantic analyzer rejects invalid binary operands", "[semantic]")
@@ -383,7 +397,8 @@ TEST_CASE("Semantic analyzer rejects invalid binary operands", "[semantic]")
             node<Number>(1.0, 2), 2);
         const auto result = analyzeExpression(expression, TypeName::Real);
         CHECK_FALSE(result.valid);
-        CHECK(result.errors.size() == 1);
+        REQUIRE(result.errors.size() == 1);
+        CHECK(std::get<1>(result.errors.front()) == "'+' գործողության ձախ օպերանդը պետք է լինի REAL, բայց ստացվել է TEXT։");
     }
 
     SECTION("concatenation requires TEXT")
@@ -466,7 +481,9 @@ TEST_CASE("Semantic analyzer requires BOOL branch conditions", "[semantic]")
     const auto result = analyze({subroutineWithBody("Main", {conditional})});
 
     CHECK_FALSE(result.valid);
-    CHECK(result.errors.size() == 2);
+    REQUIRE(result.errors.size() == 2);
+    CHECK(std::get<1>(result.errors[0]) == "Պայմանական ճյուղի պայմանը պետք է լինի BOOL, բայց ստացվել է REAL։");
+    CHECK(std::get<1>(result.errors[1]) == "Պայմանական ճյուղի պայմանը պետք է լինի BOOL, բայց ստացվել է TEXT։");
 }
 
 TEST_CASE("Semantic analyzer requires a BOOL WHILE condition", "[semantic]")
@@ -476,7 +493,8 @@ TEST_CASE("Semantic analyzer requires a BOOL WHILE condition", "[semantic]")
     const auto result = analyze({subroutineWithBody("Main", {loop})});
 
     CHECK_FALSE(result.valid);
-    CHECK(result.errors.size() == 1);
+    REQUIRE(result.errors.size() == 1);
+    CHECK(std::get<1>(result.errors.front()) == "WHILE-ի պայմանը պետք է լինի BOOL, բայց ստացվել է TEXT։");
 }
 
 TEST_CASE("Semantic analyzer checks FOR bounds and step", "[semantic]")
@@ -531,7 +549,8 @@ TEST_CASE("Semantic analyzer requires a scalar REAL array size", "[semantic]")
         auto array = node<Dim>("items", size, TypeName::Real, true, 1);
         const auto result = analyze({subroutineWithBody("Main", {array})});
         CHECK_FALSE(result.valid);
-        CHECK(result.errors.size() == 1);
+        REQUIRE(result.errors.size() == 1);
+        CHECK(std::get<1>(result.errors.front()) == "Զանգվածի չափը պետք է լինի REAL, բայց ստացվել է TEXT։");
     }
 
     SECTION("array value")
@@ -615,7 +634,8 @@ TEST_CASE("Semantic analyzer requires a scalar REAL index", "[semantic]")
     const auto result = analyze({subroutineWithBody("Main", {array, assignment})});
 
     CHECK_FALSE(result.valid);
-    CHECK(result.errors.size() == 1);
+    REQUIRE(result.errors.size() == 1);
+    CHECK(std::get<1>(result.errors.front()) == "Զանգվածի ինդեքսը պետք է լինի REAL, բայց ստացվել է TEXT։");
 }
 
 TEST_CASE("Semantic analyzer binds valid procedure and function calls", "[semantic]")
@@ -707,7 +727,8 @@ TEST_CASE("Semantic analyzer checks scalar argument types", "[semantic]")
         subroutine("UseNumber", std::move(parameters), std::nullopt, 4)});
 
     CHECK_FALSE(result.valid);
-    CHECK(result.errors.size() == 1);
+    REQUIRE(result.errors.size() == 1);
+    CHECK(std::get<1>(result.errors.front()) == "'UseNumber' ենթածրագրի թիվ 1 արգումենտը պետք է լինի REAL, բայց ստացվել է TEXT։");
 }
 
 TEST_CASE("Semantic analyzer checks argument shapes", "[semantic]")

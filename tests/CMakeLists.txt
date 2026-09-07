@@ -3,6 +3,7 @@ find_package(Catch2 3 REQUIRED)
 add_executable(${PROJECT_NAME}-tests
     ast_test.cxx
     astlisp_test.cxx
+    formatters_test.cxx
     lexeme_test.cxx
     parser_test.cxx
     scanner_test.cxx
