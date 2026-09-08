@@ -4,6 +4,7 @@
 #include "diagnostics.hxx"
 #include "scanner.hxx"
 
+#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
@@ -26,6 +27,7 @@ private:
     Dim::Ptr parseDim();
     Dim::Ptr parseDeclaration(bool sizeRequired);
     Parameter::Ptr parseParameter();
+    std::optional<TypeName> parseType();
     If::Ptr parseIf();
     IfBranch::Ptr parseIfBranch(Token keyword);
     While::Ptr parseWhile();

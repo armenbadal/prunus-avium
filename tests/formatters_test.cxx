@@ -6,6 +6,16 @@
 
 using namespace avium;
 
+TEST_CASE("Lexeme-ը ձևաչափվում է diagnostic ներկայացմամբ", "[formatters]")
+{
+    CHECK(std::format("{}", Lexeme{Token::NewLine, "", 1}) == "տողի ավարտ");
+    CHECK(std::format("{}", Lexeme{Token::Eof, "", 1}) == "ֆայլի ավարտ");
+    CHECK(std::format("{}", Lexeme{Token::None, "@", 1}) == "անհայտ նիշ '@'");
+    CHECK(std::format("{}", Lexeme{Token::Identifier, "value", 1}) == "'value'");
+    CHECK(std::format("{}", Lexeme{Token::RealLit, "3.14", 1}) == "'3.14'");
+    CHECK(std::format("{}", Lexeme{Token::Then, "THEN", 1}) == "'THEN'");
+}
+
 TEST_CASE("TypeName-ը ձևաչափվում է std::format-ով", "[formatters]")
 {
     CHECK(std::format("{}", TypeName::Bool) == "BOOL");

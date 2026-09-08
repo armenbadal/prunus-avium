@@ -63,8 +63,6 @@ enum class Token : int {
     Eof,
 };
 
-std::string toString(Token token);
-
 // Scanner-ի և parser-ի միջև փոխանցվող մեկ բառային տարր։
 class Lexeme {
 public:

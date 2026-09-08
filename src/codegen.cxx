@@ -35,7 +35,10 @@ std::string mangledName(std::string_view name)
 } // namespace
 
 CodeGenerator::CodeGenerator(llvm::LLVMContext& context, const SymbolTable& symbols, const SemanticModel& model)
-    : _context{context}, _symbols{symbols}, _model{model}, _builder{context}
+    : _context{context}
+    , _symbols{symbols}
+    , _model{model}
+    , _builder{context}
 {
 }
 
@@ -80,10 +83,7 @@ llvm::StructType* CodeGenerator::arrayType() const
 
 SymbolId CodeGenerator::symbolId(const Node& node) const
 {
-    const auto id = _model.symbol(node.id());
-    if( !id.has_value() )
-        throw std::runtime_error{"AST հանգույցը կապված չէ սիմվոլի հետ։"};
-    return *id;
+    return *_model.symbol(node.id());
 }
 
 void CodeGenerator::declareSubroutines(const Program& program)
@@ -122,11 +122,9 @@ void CodeGenerator::defineSubroutine(const Subroutine& subroutine)
     allocateLocals(*subroutine._body);
 
     if( subroutine._returnType.has_value() ) {
-        const auto returnId = _model.returnValue(subroutine.id());
-        if( !returnId.has_value() )
-            throw std::runtime_error{"Ֆունկցիան կապված չէ վերադարձվող փոփոխականի հետ։"};
-        const auto& symbol = _symbols.symbol(*returnId);
-        auto* value = _builder.CreateLoad(llvmType(*symbol.type), _storage.at(*returnId));
+        const auto returnId = *_model.returnValue(subroutine.id());
+        const auto& symbol = _symbols.symbol(returnId);
+        auto* value = _builder.CreateLoad(llvmType(*symbol.type), _storage.at(returnId));
         _builder.CreateRet(value);
     }
     else {
