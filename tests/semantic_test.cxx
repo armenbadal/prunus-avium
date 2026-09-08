@@ -103,6 +103,7 @@ TEST_CASE("Semantic analyzer declares subroutine signatures", "[semantic]")
     SemanticAnalyzer analyzer{symbols, model, diagnostics};
 
     REQUIRE(analyzer.analyze(*program));
+    CHECK(model.entryPoint() == model.symbol(main->id()));
     const auto id = model.symbol(printItems->id());
     REQUIRE(id.has_value());
     const auto& symbol = symbols.symbol(*id);

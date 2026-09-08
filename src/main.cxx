@@ -1,6 +1,9 @@
-#include "astlisp.hxx"
+#include "codegen.hxx"
 #include "parser.hxx"
 #include "semantic.hxx"
+
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/Support/raw_ostream.h>
 
 #include <cstdlib>
 #include <filesystem>
@@ -57,6 +60,9 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    ///avium::AstLisp{}.emit(program, std::cout);
+    llvm::LLVMContext context;
+    avium::CodeGenerator generator{context, symbols, model};
+    const auto module = generator.generate(*program, source.string());
+    module->print(llvm::outs(), nullptr);
     return EXIT_SUCCESS;
 }

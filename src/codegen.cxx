@@ -49,7 +49,7 @@ std::unique_ptr<llvm::Module> CodeGenerator::generate(const Program& program, st
     declareSubroutines(program);
     for( const auto& subroutine : program._subroutines )
         defineSubroutine(*subroutine);
-    createEntryPoint(program);
+    createEntryPoint();
 
     verifyGeneratedModule(*_module);
     _builder.ClearInsertionPoint();
@@ -68,7 +68,7 @@ llvm::Type* CodeGenerator::llvmType(TypeName type) const
         case TypeName::Text:
             return llvm::PointerType::get(_context, 0);
     }
-    throw std::runtime_error{"Կեռասի տիպը հնարավոր չէ ներկայացնել LLVM IR-ում։"};
+    std::unreachable();
 }
 
 llvm::StructType* CodeGenerator::arrayType() const
@@ -96,18 +96,13 @@ void CodeGenerator::declareSubroutines(const Program& program)
         std::vector<llvm::Type*> parameterTypes;
         parameterTypes.reserve(signature.parameters.size());
         for( const auto& parameter : signature.parameters ) {
-            if( parameter.isArray ) {
+            if( parameter.isArray )
                 parameterTypes.push_back(llvm::PointerType::get(_context, 0));
-                continue;
-            }
-            if( !parameter.type.has_value() )
-                throw std::runtime_error{"Օգտատիրոջ ենթածրագրի պարամետրի տիպը հայտնի չէ։"};
-            parameterTypes.push_back(llvmType(*parameter.type));
+            else
+                parameterTypes.push_back(llvmType(*parameter.type));
         }
 
-        auto* returnType = signature.returnType.has_value()
-            ? llvmType(*signature.returnType)
-            : llvm::Type::getVoidTy(_context);
+        auto* returnType = signature.returnType.has_value() ? llvmType(*signature.returnType) : llvm::Type::getVoidTy(_context);
         auto* functionType = llvm::FunctionType::get(returnType, parameterTypes, false);
         const auto name = mangledName(signature.name);
         auto* function = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, name, *_module);
@@ -209,25 +204,15 @@ void CodeGenerator::allocateVariable(SymbolId id)
     _storage.emplace(id, address);
 }
 
-void CodeGenerator::createEntryPoint(const Program& program)
+void CodeGenerator::createEntryPoint()
 {
-    const Subroutine* mainSubroutine = nullptr;
-    for( const auto& subroutine : program._subroutines ) {
-        if( subroutine->_name == "Main" ) {
-            mainSubroutine = subroutine.get();
-            break;
-        }
-    }
-    if( mainSubroutine == nullptr )
-        throw std::runtime_error{"Կեռաս ծրագիրը չունի Main ենթածրագիր։"};
-
     auto* returnType = llvm::Type::getInt32Ty(_context);
     auto* functionType = llvm::FunctionType::get(returnType, false);
     auto* main = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, "main", *_module);
     auto* entry = llvm::BasicBlock::Create(_context, "entry", main);
     _builder.SetInsertPoint(entry);
 
-    const auto mainId = symbolId(*mainSubroutine);
+    const auto mainId = *_model.entryPoint();
     _builder.CreateCall(_functions.at(mainId));
     _builder.CreateRet(llvm::ConstantInt::get(returnType, 0));
 }

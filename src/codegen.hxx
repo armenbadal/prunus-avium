@@ -40,7 +40,7 @@ private:
     void allocateReturnValue(const Subroutine& subroutine);
     void allocateLocals(const Sequence& sequence);
     void allocateVariable(SymbolId id);
-    void createEntryPoint(const Program& program);
+    void createEntryPoint();
 
     llvm::LLVMContext& _context;
     const SymbolTable& _symbols;

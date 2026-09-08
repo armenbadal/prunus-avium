@@ -15,15 +15,18 @@ class SemanticModel {
 public:
     void bind(NodeId node, SymbolId symbol);
     void bindReturnValue(NodeId subroutine, SymbolId symbol);
+    void setEntryPoint(SymbolId symbol);
     void setType(NodeId node, TypeName type);
 
     std::optional<SymbolId> symbol(NodeId node) const;
     std::optional<SymbolId> returnValue(NodeId subroutine) const;
+    std::optional<SymbolId> entryPoint() const;
     std::optional<TypeName> type(NodeId node) const;
 
 private:
     std::unordered_map<NodeId, SymbolId> _symbols;
     std::unordered_map<NodeId, SymbolId> _returnValues;
+    std::optional<SymbolId> _entryPoint;
     std::unordered_map<NodeId, TypeName> _types;
 };
 

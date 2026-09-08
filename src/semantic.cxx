@@ -90,6 +90,11 @@ void SemanticModel::bindReturnValue(NodeId subroutine, SymbolId symbol)
     _returnValues.insert_or_assign(subroutine, symbol);
 }
 
+void SemanticModel::setEntryPoint(SymbolId symbol)
+{
+    _entryPoint = symbol;
+}
+
 void SemanticModel::setType(NodeId node, TypeName type)
 {
     _types.insert_or_assign(node, type);
@@ -107,6 +112,11 @@ std::optional<SymbolId> SemanticModel::returnValue(NodeId subroutine) const
     if( const auto entry = _returnValues.find(subroutine); entry != _returnValues.end() )
         return entry->second;
     return std::nullopt;
+}
+
+std::optional<SymbolId> SemanticModel::entryPoint() const
+{
+    return _entryPoint;
 }
 
 std::optional<TypeName> SemanticModel::type(NodeId node) const
@@ -144,6 +154,8 @@ void SemanticAnalyzer::visit(Program& program)
         report(program, "Ծրագիրը պետք է ունենա ճիշտ մեկ 'Main' ենթածրագիր։");
     }
     else {
+        _model.setEntryPoint(*_model.symbol(main->id()));
+
         if( !main->_parameters.empty() )
             report(*main, "'Main' ենթածրագիրը պարամետրեր չի կարող ունենալ։");
 
