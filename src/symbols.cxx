@@ -58,7 +58,7 @@ SymbolId SymbolTable::declareSubroutine(SubroutineSignature signature)
     Symbol symbol{
         .kind = SymbolKind::Subroutine,
         .name = signature.name,
-        .type = signature.returnType.value_or(TypeName::Unknown),
+        .type = signature.returnType,
         .isArray = false,
         .storage = signature.builtin ? VariableStorage::Builtin : VariableStorage::Local,
         .subroutine = std::move(signature)};

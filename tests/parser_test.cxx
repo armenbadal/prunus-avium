@@ -90,6 +90,19 @@ TEST_CASE("Parser reports malformed input", "[parser]")
     CHECK(result.diagnostics.count() > 0);
 }
 
+TEST_CASE("Parser omits declarations without a type", "[parser]")
+{
+    const auto result = parse("SUB Main(value AS)\n"
+                              "DIM item AS\n"
+                              "END SUB\n");
+
+    CHECK(result.diagnostics.count() == 2);
+    REQUIRE(result.program->_subroutines.size() == 1);
+    const auto& main = result.program->_subroutines.front();
+    CHECK(main->_parameters.empty());
+    CHECK(main->_body->_items.empty());
+}
+
 TEST_CASE("All bundled examples follow the Cherry grammar", "[parser][examples]")
 {
     const auto examples = std::filesystem::path{AVIUM_SOURCE_DIR} / "examples";

@@ -4,6 +4,7 @@
 
 #include <format>
 #include <string_view>
+#include <utility>
 
 namespace std {
 
@@ -11,20 +12,17 @@ template<>
 struct formatter<avium::TypeName> : formatter<string_view> {
     format_context::iterator format(avium::TypeName type, format_context& context) const
     {
-        string_view value{"UNKNOWN"};
-        switch( type ) {
-            case avium::TypeName::Bool:
-                value = "BOOL";
-                break;
-            case avium::TypeName::Real:
-                value = "REAL";
-                break;
-            case avium::TypeName::Text:
-                value = "TEXT";
-                break;
-            case avium::TypeName::Unknown:
-                break;
-        }
+        const auto value = [type] {
+            switch( type ) {
+                case avium::TypeName::Bool:
+                    return string_view{"BOOL"};
+                case avium::TypeName::Real:
+                    return string_view{"REAL"};
+                case avium::TypeName::Text:
+                    return string_view{"TEXT"};
+            }
+            unreachable();
+        }();
         return formatter<string_view>::format(value, context);
     }
 };

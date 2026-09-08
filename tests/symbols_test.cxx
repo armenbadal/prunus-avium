@@ -14,6 +14,7 @@ TEST_CASE("SymbolTable declares and resolves variables", "[symbols]")
     REQUIRE(id != UnknownSymbol);
     CHECK(symbols.lookup("value") == id);
     CHECK(symbols.declaredInCurrentScope("value"));
+    REQUIRE(symbols.symbol(id).type.has_value());
     CHECK(symbols.symbol(id).type == TypeName::Real);
     CHECK(symbols.symbol(id).kind == SymbolKind::Variable);
 }
@@ -54,5 +55,15 @@ TEST_CASE("Subroutine lookup ignores a same-named local variable", "[symbols]")
     CHECK(symbols.lookup("Value") == variable);
     CHECK(symbols.lookupSubroutine("Value") == subroutine);
     REQUIRE(symbols.symbol(subroutine).subroutine.has_value());
+    CHECK(symbols.symbol(subroutine).type == TypeName::Real);
     CHECK(symbols.symbol(subroutine).subroutine->returnType == TypeName::Real);
+}
+
+TEST_CASE("Procedure symbols have no value type", "[symbols]")
+{
+    SymbolTable symbols;
+    const auto id = symbols.declareSubroutine({"Work", {}, std::nullopt, false});
+
+    REQUIRE(id != UnknownSymbol);
+    CHECK_FALSE(symbols.symbol(id).type.has_value());
 }

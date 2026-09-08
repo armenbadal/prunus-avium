@@ -14,7 +14,6 @@ using Position = std::uint32_t;
 using NodeId = std::uint64_t;
 
 enum class TypeName : std::uint8_t {
-    Unknown,
     Bool,
     Real,
     Text,
@@ -228,7 +227,7 @@ public:
 
     const std::string _name;
     const Expression::Ptr _size;
-    const TypeName _type{TypeName::Unknown};
+    const TypeName _type;
     const bool _isArray{false};
 };
 

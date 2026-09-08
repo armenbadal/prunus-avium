@@ -68,6 +68,20 @@ Operation operation(Token token)
     }
 }
 
+TypeName typeName(Token token)
+{
+    switch( token ) {
+        case Token::Bool:
+            return TypeName::Bool;
+        case Token::Real:
+            return TypeName::Real;
+        case Token::Text:
+            return TypeName::Text;
+        default:
+            std::unreachable();
+    }
+}
+
 } // namespace
 
 Parser::Parser(Scanner& scanner, Diagnostics& diagnostics)
@@ -139,10 +153,12 @@ Subroutine::Ptr Parser::parseSubroutine()
     if( _lookahead.is(Token::LeftPar) ) {
         match(Token::LeftPar);
         if( _lookahead.is(Token::Identifier) ) {
-            parameters.push_back(parseParameter());
+            if( auto parameter = parseParameter() )
+                parameters.push_back(std::move(parameter));
             while( _lookahead.is(Token::Comma) ) {
                 match(Token::Comma);
-                parameters.push_back(parseParameter());
+                if( auto parameter = parseParameter() )
+                    parameters.push_back(std::move(parameter));
             }
         }
         match(Token::RightPar);
@@ -154,9 +170,7 @@ Subroutine::Ptr Parser::parseSubroutine()
         if( _lookahead.is(Token::Real, Token::Text, Token::Bool) ) {
             const auto token = _lookahead.kind;
             match(token);
-            returnType = token == Token::Real ? TypeName::Real
-                : token == Token::Text        ? TypeName::Text
-                                              : TypeName::Bool;
+            returnType = typeName(token);
         }
         else {
             _diagnostics.mark(_lookahead.line,
@@ -182,20 +196,16 @@ Parameter::Ptr Parser::parseParameter()
     }
 
     match(Token::As);
-    TypeName type = TypeName::Unknown;
     if( _lookahead.is(Token::Real, Token::Text, Token::Bool) ) {
         const auto token = _lookahead.kind;
         match(token);
-        type = token == Token::Real ? TypeName::Real
-            : token == Token::Text  ? TypeName::Text
-                                    : TypeName::Bool;
+        const auto type = typeName(token);
+        return node<Parameter>(name, nullptr, type, isArray, line);
     }
-    else {
-        _diagnostics.mark(_lookahead.line,
-            std::format("Սպասվում է տիպ (REAL | TEXT | BOOL), բայց հանդիպել է {}։",
-                describe(_lookahead)));
-    }
-    return node<Parameter>(name, nullptr, type, isArray, line);
+    _diagnostics.mark(_lookahead.line,
+        std::format("Սպասվում է տիպ (REAL | TEXT | BOOL), բայց հանդիպել է {}։",
+            describe(_lookahead)));
+    return {};
 }
 
 Sequence::Ptr Parser::parseSequence()
@@ -209,10 +219,10 @@ Sequence::Ptr Parser::parseSequence()
             parseNewLines();
             continue;
         }
-        synchronize(statementSync,
-            std::format("Սպասվում է հրաման, բայց հանդիպել է {}։", describe(_lookahead)));
+        synchronize(statementSync, std::format("Սպասվում է հրաման, բայց հանդիպել է {}։", describe(_lookahead)));
         if( firstStatement.contains(_lookahead.kind) ) {
-            statements.push_back(parseStatement());
+            if( auto statement = parseStatement() )
+                statements.push_back(std::move(statement));
             parseNewLines();
         }
     }
@@ -275,20 +285,16 @@ Dim::Ptr Parser::parseDeclaration(bool sizeRequired)
     }
     match(Token::As);
 
-    TypeName type = TypeName::Unknown;
     if( _lookahead.is(Token::Real, Token::Text, Token::Bool) ) {
         const auto token = _lookahead.kind;
         match(token);
-        type = token == Token::Real ? TypeName::Real
-            : token == Token::Text  ? TypeName::Text
-                                    : TypeName::Bool;
+        const auto type = typeName(token);
+        return node<Dim>(name, std::move(size), type, isArray, line);
     }
-    else {
-        _diagnostics.mark(_lookahead.line,
-            std::format("Սպասվում է տիպ (REAL | TEXT | BOOL), բայց հանդիպել է {}։",
-                describe(_lookahead)));
-    }
-    return node<Dim>(name, std::move(size), type, isArray, line);
+    _diagnostics.mark(_lookahead.line,
+        std::format("Սպասվում է տիպ (REAL | TEXT | BOOL), բայց հանդիպել է {}։",
+            describe(_lookahead)));
+    return {};
 }
 
 If::Ptr Parser::parseIf()

@@ -139,17 +139,6 @@ TEST_CASE("Semantic analyzer reserves builtin subroutine names", "[semantic]")
     }
 }
 
-TEST_CASE("Semantic analyzer rejects unknown signature types", "[semantic]")
-{
-    std::vector<Parameter::Ptr> parameters{
-        node<Parameter>("value", nullptr, TypeName::Unknown, false, 3)};
-    const auto result = analyze({subroutine("Main"),
-        subroutine("Broken", std::move(parameters), TypeName::Unknown, 3)});
-
-    CHECK_FALSE(result.valid);
-    CHECK(result.errors.size() == 2);
-}
-
 TEST_CASE("Semantic analyzer binds local declarations and uses", "[semantic]")
 {
     auto declaration = node<Dim>("value", nullptr, TypeName::Real, false, 2);
@@ -253,6 +242,29 @@ TEST_CASE("Semantic analyzer accepts a compatible scalar assignment", "[semantic
 
     REQUIRE(analyzer.analyze(*program));
     CHECK(model.type(number->id()) == TypeName::Real);
+}
+
+TEST_CASE("Successful semantic analysis types every expression", "[semantic]")
+{
+    auto left = node<Number>(1.0, 3);
+    auto right = node<Number>(2.0, 3);
+    auto sum = node<Binary>(Operation::Add, left, right, 3);
+    auto limit = node<Number>(4.0, 3);
+    auto comparison = node<Binary>(Operation::Lt, sum, limit, 3);
+    auto negation = node<Unary>(Operation::Not, comparison, 3);
+    auto target = node<Variable>("result", 3);
+    auto declaration = node<Dim>("result", nullptr, TypeName::Bool, false, 2);
+    auto assignment = node<Let>(target, nullptr, negation, 3);
+    auto main = subroutineWithBody("Main", {declaration, assignment});
+    auto program = node<Program>(std::vector<Subroutine::Ptr>{main}, 1);
+    SymbolTable symbols;
+    SemanticModel model;
+    Diagnostics diagnostics;
+    SemanticAnalyzer analyzer{symbols, model, diagnostics};
+
+    REQUIRE(analyzer.analyze(*program));
+    for( const auto& expression : std::vector<Expression::Ptr>{left, right, sum, limit, comparison, negation, target} )
+        CHECK(model.type(expression->id()).has_value());
 }
 
 TEST_CASE("Semantic analyzer rejects an assignment type mismatch", "[semantic]")
@@ -378,7 +390,7 @@ TEST_CASE("Semantic analyzer rejects invalid unary operands", "[semantic]")
     }
 }
 
-TEST_CASE("Semantic analyzer suppresses a unary type error for an unknown operand", "[semantic]")
+TEST_CASE("Semantic analyzer suppresses a unary type error for an unresolved operand", "[semantic]")
 {
     auto operand = node<Variable>("missing", 2);
     auto expression = node<Unary>(Operation::Not, operand, 2);

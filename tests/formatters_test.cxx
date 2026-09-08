@@ -8,7 +8,6 @@ using namespace avium;
 
 TEST_CASE("TypeName-ը ձևաչափվում է std::format-ով", "[formatters]")
 {
-    CHECK(std::format("{}", TypeName::Unknown) == "UNKNOWN");
     CHECK(std::format("{}", TypeName::Bool) == "BOOL");
     CHECK(std::format("{}", TypeName::Real) == "REAL");
     CHECK(std::format("{}", TypeName::Text) == "TEXT");

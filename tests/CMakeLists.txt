@@ -3,6 +3,7 @@ find_package(Catch2 3 REQUIRED)
 add_executable(${PROJECT_NAME}-tests
     ast_test.cxx
     astlisp_test.cxx
+    codegen_test.cxx
     formatters_test.cxx
     lexeme_test.cxx
     parser_test.cxx
@@ -10,6 +11,7 @@ add_executable(${PROJECT_NAME}-tests
     semantic_test.cxx
     symbols_test.cxx
     "${PROJECT_SOURCE_DIR}/src/astlisp.cxx"
+    "${PROJECT_SOURCE_DIR}/src/codegen.cxx"
     "${PROJECT_SOURCE_DIR}/src/diagnostics.cxx"
     "${PROJECT_SOURCE_DIR}/src/lexeme.cxx"
     "${PROJECT_SOURCE_DIR}/src/parser.cxx"
@@ -17,10 +19,12 @@ add_executable(${PROJECT_NAME}-tests
     "${PROJECT_SOURCE_DIR}/src/semantic.cxx"
     "${PROJECT_SOURCE_DIR}/src/symbols.cxx")
 target_compile_features(${PROJECT_NAME}-tests PRIVATE cxx_std_23)
+target_compile_options(${PROJECT_NAME}-tests PRIVATE ${LLVM_DEFINITIONS_LIST})
 target_compile_definitions(${PROJECT_NAME}-tests PRIVATE
     AVIUM_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 target_include_directories(${PROJECT_NAME}-tests PRIVATE
     "${PROJECT_SOURCE_DIR}/src")
-target_link_libraries(${PROJECT_NAME}-tests PRIVATE Catch2::Catch2WithMain)
+target_include_directories(${PROJECT_NAME}-tests SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
+target_link_libraries(${PROJECT_NAME}-tests PRIVATE Catch2::Catch2WithMain LLVMCore)
 
 add_test(NAME ${PROJECT_NAME}.tests COMMAND ${PROJECT_NAME}-tests)

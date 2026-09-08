@@ -14,13 +14,16 @@ namespace avium {
 class SemanticModel {
 public:
     void bind(NodeId node, SymbolId symbol);
+    void bindReturnValue(NodeId subroutine, SymbolId symbol);
     void setType(NodeId node, TypeName type);
 
     std::optional<SymbolId> symbol(NodeId node) const;
+    std::optional<SymbolId> returnValue(NodeId subroutine) const;
     std::optional<TypeName> type(NodeId node) const;
 
 private:
     std::unordered_map<NodeId, SymbolId> _symbols;
+    std::unordered_map<NodeId, SymbolId> _returnValues;
     std::unordered_map<NodeId, TypeName> _types;
 };
 
@@ -64,7 +67,7 @@ private:
     std::optional<SymbolId> resolveVariable(const Variable& variable);
     std::optional<SymbolId> resolveSubroutine(const Node& node, std::string_view name);
     void validateArguments(const Node& node, std::string_view name, const std::vector<Expression::Ptr>& arguments, const SubroutineSignature& signature);
-    TypeName expressionType(const Expression::Ptr& expression);
+    std::optional<TypeName> expressionType(const Expression::Ptr& expression);
     bool isArrayExpression(const Expression& expression) const;
     bool requireScalar(const Expression& expression);
     void validateIndex(const Expression::Ptr& index);

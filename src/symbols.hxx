@@ -44,7 +44,7 @@ struct Symbol {
     SymbolId id{UnknownSymbol};
     SymbolKind kind{SymbolKind::Variable};
     std::string name;
-    TypeName type{TypeName::Unknown};
+    std::optional<TypeName> type;
     bool isArray{false};
     VariableStorage storage{VariableStorage::Local};
     std::optional<SubroutineSignature> subroutine;
