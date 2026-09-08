@@ -39,7 +39,7 @@ TEST_CASE("AstLisp emits expressions and statements", "[astlisp]")
     auto body = node<Sequence>(std::vector<Statement::Ptr>{assignment}, 1);
 
     const auto result = emit(program({subroutine("Main", body)}));
-    CHECK(result.find("(avium-binary :operation \"ADD\"") != std::string::npos);
+    CHECK(result.find("(avium-binary :operation \"+\"") != std::string::npos);
     CHECK(result.find("(avium-let") != std::string::npos);
     CHECK(result.find("(avium-sequence :items") != std::string::npos);
 }

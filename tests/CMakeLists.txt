@@ -3,14 +3,19 @@ find_package(Catch2 3 REQUIRED)
 add_executable(${PROJECT_NAME}-tests
     ast_test.cxx
     astlisp_test.cxx
+    formatters_test.cxx
     lexeme_test.cxx
     parser_test.cxx
     scanner_test.cxx
+    semantic_test.cxx
+    symbols_test.cxx
     "${PROJECT_SOURCE_DIR}/src/astlisp.cxx"
     "${PROJECT_SOURCE_DIR}/src/diagnostics.cxx"
     "${PROJECT_SOURCE_DIR}/src/lexeme.cxx"
     "${PROJECT_SOURCE_DIR}/src/parser.cxx"
-    "${PROJECT_SOURCE_DIR}/src/scanner.cxx")
+    "${PROJECT_SOURCE_DIR}/src/scanner.cxx"
+    "${PROJECT_SOURCE_DIR}/src/semantic.cxx"
+    "${PROJECT_SOURCE_DIR}/src/symbols.cxx")
 target_compile_features(${PROJECT_NAME}-tests PRIVATE cxx_std_23)
 target_compile_definitions(${PROJECT_NAME}-tests PRIVATE
     AVIUM_SOURCE_DIR="${PROJECT_SOURCE_DIR}")

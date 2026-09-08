@@ -1,72 +1,9 @@
 #include "astlisp.hxx"
+#include "formatters.hxx"
 
 #include <format>
 
 namespace avium {
-
-namespace {
-
-std::string operationName(Operation operation)
-{
-    switch( operation ) {
-        case Operation::Add:
-            return "ADD";
-        case Operation::Sub:
-            return "SUB";
-        case Operation::Mul:
-            return "MUL";
-        case Operation::Div:
-            return "DIV";
-        case Operation::Quot:
-            return "QUOT";
-        case Operation::Mod:
-            return "MOD";
-        case Operation::Pow:
-            return "POW";
-        case Operation::Eq:
-            return "EQ";
-        case Operation::Ne:
-            return "NE";
-        case Operation::Gt:
-            return "GT";
-        case Operation::Ge:
-            return "GE";
-        case Operation::Lt:
-            return "LT";
-        case Operation::Le:
-            return "LE";
-        case Operation::And:
-            return "AND";
-        case Operation::Or:
-            return "OR";
-        case Operation::Not:
-            return "NOT";
-        case Operation::Conc:
-            return "CONC";
-        case Operation::Index:
-            return "INDEX";
-        case Operation::None:
-            return "?";
-    }
-    return "?";
-}
-
-std::string typeName(TypeName type)
-{
-    switch( type ) {
-        case TypeName::Bool:
-            return "BOOL";
-        case TypeName::Real:
-            return "REAL";
-        case TypeName::Text:
-            return "TEXT";
-        case TypeName::Unknown:
-            return "UNKNOWN";
-    }
-    return "UNKNOWN";
-}
-
-} // namespace
 
 void AstLisp::emit(Program::Ptr node, std::ostream& output)
 {
@@ -96,13 +33,13 @@ std::string AstLisp::visit(Variable& node)
 std::string AstLisp::visit(Unary& node)
 {
     return std::format("(avium-unary :operation \"{}\" :operand {})",
-        operationName(node._operation), visit(*node._operand));
+        node._operation, visit(*node._operand));
 }
 
 std::string AstLisp::visit(Binary& node)
 {
     return std::format("(avium-binary :operation \"{}\" :left {} :right {})",
-        operationName(node._operation), visit(*node._left), visit(*node._right));
+        node._operation, visit(*node._left), visit(*node._right));
 }
 
 std::string AstLisp::visit(Apply& node)
@@ -121,7 +58,7 @@ std::string AstLisp::visit(Let& node)
 std::string AstLisp::visit(Dim& node)
 {
     return std::format("(avium-dim :name \"{}\" :size {} :type \"{}\" :array {})",
-        node._name, node._size ? visit(*node._size) : "NIL", typeName(node._type),
+        node._name, node._size ? visit(*node._size) : "NIL", node._type,
         node._isArray ? "T" : "NIL");
 }
 
@@ -163,7 +100,7 @@ std::string AstLisp::visit(Sequence& node)
 
 std::string AstLisp::visit(Subroutine& node)
 {
-    const auto returnType = node._returnType ? typeName(*node._returnType) : "NIL";
+    const auto returnType = node._returnType ? std::format("{}", *node._returnType) : "NIL";
     return std::format("(avium-subroutine :name \"{}\" :parameters '({}) :return-type \"{}\" :body {})",
         node._name, visitVector(node._parameters), returnType, visit(*node._body));
 }
