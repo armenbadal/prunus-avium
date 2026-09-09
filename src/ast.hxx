@@ -80,7 +80,7 @@ public:
         return _id;
     }
 
-    using Ptr = std::shared_ptr<Node>;
+    using Ptr = std::unique_ptr<Node>;
 
     const NodeKind kind{NodeKind::Empty};
     const Position line{0};
@@ -91,9 +91,9 @@ private:
 };
 
 template<typename T, typename... Args>
-std::shared_ptr<T> node(Args&&... args)
+std::unique_ptr<T> node(Args&&... args)
 {
-    return std::make_shared<T>(std::forward<Args>(args)...);
+    return std::make_unique<T>(std::forward<Args>(args)...);
 }
 
 class Expression : public Node {
@@ -103,7 +103,7 @@ public:
     {
     }
 
-    using Ptr = std::shared_ptr<Expression>;
+    using Ptr = std::unique_ptr<Expression>;
 };
 
 class Boolean final : public Expression {
@@ -113,7 +113,7 @@ public:
     {
     }
 
-    using Ptr = std::shared_ptr<Boolean>;
+    using Ptr = std::unique_ptr<Boolean>;
 
     const bool _value{false};
 };
@@ -125,7 +125,7 @@ public:
     {
     }
 
-    using Ptr = std::shared_ptr<Number>;
+    using Ptr = std::unique_ptr<Number>;
 
     const double _value{0.0};
 };
@@ -137,7 +137,7 @@ public:
     {
     }
 
-    using Ptr = std::shared_ptr<Text>;
+    using Ptr = std::unique_ptr<Text>;
 
     const std::string _value;
 };
@@ -149,7 +149,7 @@ public:
     {
     }
 
-    using Ptr = std::shared_ptr<Variable>;
+    using Ptr = std::unique_ptr<Variable>;
 
     const std::string _name;
 };
@@ -161,7 +161,7 @@ public:
     {
     }
 
-    using Ptr = std::shared_ptr<Unary>;
+    using Ptr = std::unique_ptr<Unary>;
 
     const Operation _operation{Operation::None};
     const Expression::Ptr _operand;
@@ -174,7 +174,7 @@ public:
     {
     }
 
-    using Ptr = std::shared_ptr<Binary>;
+    using Ptr = std::unique_ptr<Binary>;
 
     const Operation _operation{Operation::None};
     const Expression::Ptr _left;
@@ -188,7 +188,7 @@ public:
     {
     }
 
-    using Ptr = std::shared_ptr<Apply>;
+    using Ptr = std::unique_ptr<Apply>;
 
     const std::string _callee;
     const std::vector<Expression::Ptr> _arguments;
@@ -201,7 +201,7 @@ public:
     {
     }
 
-    using Ptr = std::shared_ptr<Statement>;
+    using Ptr = std::unique_ptr<Statement>;
 };
 
 class Sequence final : public Node {
@@ -211,7 +211,7 @@ public:
     {
     }
 
-    using Ptr = std::shared_ptr<Sequence>;
+    using Ptr = std::unique_ptr<Sequence>;
 
     const std::vector<Statement::Ptr> _items;
 };
@@ -223,7 +223,7 @@ public:
     {
     }
 
-    using Ptr = std::shared_ptr<Dim>;
+    using Ptr = std::unique_ptr<Dim>;
 
     const std::string _name;
     const Expression::Ptr _size;
@@ -240,7 +240,7 @@ public:
     {
     }
 
-    using Ptr = std::shared_ptr<Let>;
+    using Ptr = std::unique_ptr<Let>;
 
     // _index-ը դատարկ է պարզ փոփոխականի վերագրման դեպքում։
     const Variable::Ptr _variable;
@@ -255,7 +255,7 @@ public:
     {
     }
 
-    using Ptr = std::shared_ptr<IfBranch>;
+    using Ptr = std::unique_ptr<IfBranch>;
 
     const Expression::Ptr _condition;
     const Sequence::Ptr _body;
@@ -268,7 +268,7 @@ public:
     {
     }
 
-    using Ptr = std::shared_ptr<If>;
+    using Ptr = std::unique_ptr<If>;
 
     const std::vector<IfBranch::Ptr> _branches;
     const Sequence::Ptr _alternative;
@@ -281,7 +281,7 @@ public:
     {
     }
 
-    using Ptr = std::shared_ptr<While>;
+    using Ptr = std::unique_ptr<While>;
 
     const Expression::Ptr _condition;
     const Sequence::Ptr _body;
@@ -295,7 +295,7 @@ public:
     {
     }
 
-    using Ptr = std::shared_ptr<For>;
+    using Ptr = std::unique_ptr<For>;
 
     const Variable::Ptr _parameter;
     const Expression::Ptr _begin;
@@ -313,7 +313,7 @@ public:
     {
     }
 
-    using Ptr = std::shared_ptr<Call>;
+    using Ptr = std::unique_ptr<Call>;
 
     const std::string _callee;
     const std::vector<Expression::Ptr> _arguments;
@@ -327,7 +327,7 @@ public:
     {
     }
 
-    using Ptr = std::shared_ptr<Subroutine>;
+    using Ptr = std::unique_ptr<Subroutine>;
 
     const std::string _name;
     const std::vector<Parameter::Ptr> _parameters;
@@ -342,7 +342,7 @@ public:
     {
     }
 
-    using Ptr = std::shared_ptr<Program>;
+    using Ptr = std::unique_ptr<Program>;
 
     const std::vector<Subroutine::Ptr> _subroutines;
 };

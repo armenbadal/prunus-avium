@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "codegen.hxx"
+#include "test_ast.hxx"
 
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Function.h>
@@ -15,14 +16,15 @@
 #include <vector>
 
 using namespace avium;
+using test::NodeList;
 
 TEST_CASE("Code generator creates a valid entry point for an empty Main",
     "[codegen]")
 {
-    auto body = node<Sequence>(std::vector<Statement::Ptr>{}, 1);
-    auto main = node<Subroutine>("Main", std::vector<Parameter::Ptr>{},
-        std::nullopt, body, 1);
-    auto program = node<Program>(std::vector<Subroutine::Ptr>{main}, 1);
+    auto body = node<Sequence>(NodeList<Statement>{}, 1);
+    auto main = node<Subroutine>("Main", NodeList<Parameter>{},
+        std::nullopt, std::move(body), 1);
+    auto program = node<Program>(NodeList<Subroutine>{std::move(main)}, 1);
 
     SymbolTable symbols;
     SemanticModel model;
@@ -67,28 +69,30 @@ TEST_CASE("Code generator creates a valid entry point for an empty Main",
 TEST_CASE("Code generator lowers subroutine signatures and parameter storage",
     "[codegen]")
 {
-    auto mainBody = node<Sequence>(std::vector<Statement::Ptr>{}, 1);
-    auto main = node<Subroutine>("Main", std::vector<Parameter::Ptr>{},
-        std::nullopt, mainBody, 1);
+    auto mainBody = node<Sequence>(NodeList<Statement>{}, 1);
+    auto main = node<Subroutine>("Main", NodeList<Parameter>{},
+        std::nullopt, std::move(mainBody), 1);
 
-    std::vector<Parameter::Ptr> parameters{
+    NodeList<Parameter> parameters{
         node<Parameter>("flag", nullptr, TypeName::Bool, false, 2),
         node<Parameter>("number", nullptr, TypeName::Real, false, 2),
         node<Parameter>("label", nullptr, TypeName::Text, false, 2),
         node<Parameter>("items", nullptr, TypeName::Real, true, 2),
     };
-    auto body = node<Sequence>(std::vector<Statement::Ptr>{}, 2);
+    auto body = node<Sequence>(NodeList<Statement>{}, 2);
     auto transform = node<Subroutine>("Transform", std::move(parameters),
-        TypeName::Text, body, 2);
-    auto program = node<Program>(
-        std::vector<Subroutine::Ptr>{main, transform}, 1);
+        TypeName::Text, std::move(body), 2);
+    const auto transformId = transform->id();
+    auto program = node<Program>(NodeList<Subroutine>{
+                                     std::move(main), std::move(transform)},
+        1);
 
     SymbolTable symbols;
     SemanticModel model;
     Diagnostics diagnostics;
     SemanticAnalyzer analyzer{symbols, model, diagnostics};
     REQUIRE(analyzer.analyze(*program));
-    REQUIRE(model.returnValue(transform->id()).has_value());
+    REQUIRE(model.returnValue(transformId).has_value());
 
     llvm::LLVMContext context;
     CodeGenerator generator{context, symbols, model};
@@ -125,18 +129,22 @@ TEST_CASE("Code generator allocates every function-scoped local in the entry blo
     auto items = node<Dim>("items", node<Number>(2.0, 5), TypeName::Real, true, 5);
 
     auto nested = node<Dim>("nested", nullptr, TypeName::Real, false, 7);
-    auto branchBody = node<Sequence>(std::vector<Statement::Ptr>{nested}, 7);
-    auto branch = node<IfBranch>(node<Boolean>(true, 6), branchBody, 6);
-    auto conditional = node<If>(std::vector<IfBranch::Ptr>{branch}, nullptr, 6);
+    auto branchBody = node<Sequence>(NodeList<Statement>{std::move(nested)}, 7);
+    auto branch = node<IfBranch>(
+        node<Boolean>(true, 6), std::move(branchBody), 6);
+    auto conditional = node<If>(NodeList<IfBranch>{std::move(branch)}, nullptr, 6);
 
-    auto loopBody = node<Sequence>(std::vector<Statement::Ptr>{}, 8);
+    auto loopBody = node<Sequence>(NodeList<Statement>{}, 8);
     auto loop = node<For>(node<Variable>("index", 8), node<Number>(0.0, 8),
-        node<Number>(1.0, 8), node<Number>(1.0, 8), loopBody, 8);
-    auto body = node<Sequence>(
-        std::vector<Statement::Ptr>{flag, number, label, items, conditional, loop}, 1);
-    auto main = node<Subroutine>("Main", std::vector<Parameter::Ptr>{},
-        std::nullopt, body, 1);
-    auto program = node<Program>(std::vector<Subroutine::Ptr>{main}, 1);
+        node<Number>(1.0, 8), node<Number>(1.0, 8),
+        std::move(loopBody), 8);
+    auto body = node<Sequence>(NodeList<Statement>{std::move(flag),
+                                   std::move(number), std::move(label), std::move(items),
+                                   std::move(conditional), std::move(loop)},
+        1);
+    auto main = node<Subroutine>("Main", NodeList<Parameter>{},
+        std::nullopt, std::move(body), 1);
+    auto program = node<Program>(NodeList<Subroutine>{std::move(main)}, 1);
 
     SymbolTable symbols;
     SemanticModel model;

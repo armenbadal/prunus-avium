@@ -70,10 +70,10 @@ private:
     std::optional<SymbolId> resolveVariable(const Variable& variable);
     std::optional<SymbolId> resolveSubroutine(const Node& node, std::string_view name);
     void validateArguments(const Node& node, std::string_view name, const std::vector<Expression::Ptr>& arguments, const SubroutineSignature& signature);
-    std::optional<TypeName> expressionType(const Expression::Ptr& expression);
+    std::optional<TypeName> expressionType(Expression& expression);
     bool isArrayExpression(const Expression& expression) const;
     bool requireScalar(const Expression& expression);
-    void validateIndex(const Expression::Ptr& index);
+    void validateIndex(Expression& index);
     ParameterInfo parameterInfo(const Dim& parameter) const;
 
     void report(const Node& node, std::string_view message);
