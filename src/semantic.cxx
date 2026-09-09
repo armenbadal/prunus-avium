@@ -107,8 +107,7 @@ std::optional<TypeName> SemanticModel::type(NodeId node) const
     return std::nullopt;
 }
 
-SemanticAnalyzer::SemanticAnalyzer(SymbolTable& symbols, SemanticModel& model, Diagnostics& diagnostics)
-    : _symbols{symbols}, _model{model}, _diagnostics{diagnostics}
+SemanticAnalyzer::SemanticAnalyzer(SymbolTable& symbols, SemanticModel& model, Diagnostics& diagnostics) : _symbols{symbols}, _model{model}, _diagnostics{diagnostics}
 {
 }
 
@@ -282,6 +281,23 @@ void SemanticAnalyzer::visit(Call& call)
     if( signature.returnType.has_value() )
         report(call, "CALL-ով կարելի է կանչել միայն պրոցեդուրա։");
     validateArguments(call, call._callee, call._arguments, signature);
+}
+
+void SemanticAnalyzer::visit(Return& statement)
+{
+    const auto valueType = expressionType(*statement._value);
+    const auto scalarValue = requireScalar(*statement._value);
+
+    if( !_currentReturnType.has_value() ) {
+        report(statement, "RETURN հրամանը թույլատրելի է միայն ֆունկցիայում։");
+        return;
+    }
+
+    const auto wrongValueType = scalarValue && typeMismatch(valueType, *_currentReturnType);
+    if( wrongValueType )
+        report(*statement._value,
+            std::format("Ֆունկցիայից պետք է վերադարձվի {}, բայց ստացվել է {}։",
+                *_currentReturnType, valueType));
 }
 
 void SemanticAnalyzer::visit(Boolean& boolean)
@@ -479,10 +495,16 @@ void SemanticAnalyzer::declareSubroutines(const Program& program)
 void SemanticAnalyzer::analyzeSubroutine(Subroutine& subroutine)
 {
     _symbols.openScope();
+    _currentReturnType = subroutine._returnType;
     declareParameters(subroutine);
-    declareReturnValue(subroutine);
     declareLocals(*subroutine._body);
     visit(*subroutine._body);
+
+    const auto knownReturnType = subroutine._returnType.has_value() && *subroutine._returnType != TypeName::Unknown;
+    if( subroutine._name != "Main" && knownReturnType && !definitelyReturns(*subroutine._body) )
+        report(subroutine, std::format("'{}' ֆունկցիայի ոչ բոլոր կատարման ուղիներն են արժեք վերադարձնում։", subroutine._name));
+
+    _currentReturnType.reset();
     _symbols.closeScope();
 }
 
@@ -499,19 +521,6 @@ void SemanticAnalyzer::declareParameters(const Subroutine& subroutine)
         else
             _model.bind(parameter->id(), id);
     }
-}
-
-void SemanticAnalyzer::declareReturnValue(const Subroutine& subroutine)
-{
-    if( !subroutine._returnType.has_value() )
-        return;
-
-    const auto& name = subroutine._name;
-    const auto type = *subroutine._returnType;
-    const auto storage = VariableStorage::ReturnValue;
-    const auto id = _symbols.declareVariable(name, type, false, storage);
-    if( id == UnknownSymbol )
-        report(subroutine, std::format("'{}' անունն արդեն սահմանված է այս ենթածրագրում։", subroutine._name));
 }
 
 void SemanticAnalyzer::declareLocals(const Sequence& sequence)
@@ -677,6 +686,27 @@ void SemanticAnalyzer::validateIndex(Expression& index)
 ParameterInfo SemanticAnalyzer::parameterInfo(const Dim& parameter) const
 {
     return {parameter._type, parameter._isArray};
+}
+
+bool SemanticAnalyzer::definitelyReturns(const Sequence& sequence) const
+{
+    return std::ranges::any_of(sequence._items,
+        [this](const auto& statement) { return definitelyReturns(*statement); });
+}
+
+bool SemanticAnalyzer::definitelyReturns(const Statement& statement) const
+{
+    if( statement.kind == NodeKind::Return )
+        return true;
+    if( statement.kind != NodeKind::If )
+        return false;
+
+    const auto& conditional = static_cast<const If&>(statement);
+    if( !conditional._alternative || !definitelyReturns(*conditional._alternative) )
+        return false;
+
+    return std::ranges::all_of(conditional._branches,
+        [this](const auto& branch) { return definitelyReturns(*branch->_body); });
 }
 
 void SemanticAnalyzer::report(const Node& node, std::string_view message)

@@ -32,7 +32,7 @@ Parsed parse(std::string_view source)
 TEST_CASE("Parser parses a subroutine and its parameters", "[parser]")
 {
     auto result = parse("SUB Add(x AS REAL, values[] AS TEXT) AS REAL\n"
-                        "LET Add = x\n"
+                        "RETURN x\n"
                         "END SUB\n");
 
     REQUIRE(result.diagnostics.count() == 0);
@@ -45,6 +45,17 @@ TEST_CASE("Parser parses a subroutine and its parameters", "[parser]")
     CHECK(subroutine->_parameters[1]->_type == TypeName::Text);
     CHECK(subroutine->_parameters[1]->_isArray);
     CHECK(subroutine->_returnType == TypeName::Real);
+    REQUIRE(subroutine->_body->_items.size() == 1);
+    REQUIRE(subroutine->_body->_items.front()->kind == NodeKind::Return);
+    const auto& returnStatement =
+        static_cast<const Return&>(*subroutine->_body->_items.front());
+    CHECK(returnStatement._value->kind == NodeKind::Variable);
+}
+
+TEST_CASE("Parser requires a return value expression", "[parser]")
+{
+    const auto result = parse("SUB Value AS REAL\nRETURN\nEND SUB\n");
+    CHECK(result.diagnostics.count() > 0);
 }
 
 TEST_CASE("Parser preserves expression precedence", "[parser]")

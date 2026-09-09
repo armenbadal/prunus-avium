@@ -24,7 +24,6 @@ enum class VariableStorage : std::uint8_t {
     Local,
     Parameter,
     ForVariable,
-    ReturnValue,
     Builtin,
 };
 

@@ -42,6 +42,7 @@ public:
     void visit(While& node);
     void visit(For& node);
     void visit(Call& node);
+    void visit(Return& node);
 
     void visit(Boolean& node);
     void visit(Number& node);
@@ -56,7 +57,6 @@ private:
     void declareSubroutines(const Program& program);
     void analyzeSubroutine(Subroutine& subroutine);
     void declareParameters(const Subroutine& subroutine);
-    void declareReturnValue(const Subroutine& subroutine);
     void declareLocals(const Sequence& sequence);
     void declareDim(const Dim& dim);
     void declareForVariable(const For& loop);
@@ -69,12 +69,15 @@ private:
     bool requireScalar(const Expression& expression);
     void validateIndex(Expression& index);
     ParameterInfo parameterInfo(const Dim& parameter) const;
+    bool definitelyReturns(const Sequence& sequence) const;
+    bool definitelyReturns(const Statement& statement) const;
 
     void report(const Node& node, std::string_view message);
 
     SymbolTable& _symbols;
     SemanticModel& _model;
     Diagnostics& _diagnostics;
+    std::optional<TypeName> _currentReturnType;
 };
 
 } // namespace avium

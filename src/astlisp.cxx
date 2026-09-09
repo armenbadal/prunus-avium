@@ -93,6 +93,11 @@ std::string AstLisp::visit(Call& node)
         node._callee, spaced(node._arguments));
 }
 
+std::string AstLisp::visit(Return& node)
+{
+    return std::format("(avium-return :value {})", visit(*node._value));
+}
+
 std::string AstLisp::visit(Sequence& node)
 {
     return std::format("(avium-sequence :items{})", spaced(node._items));
