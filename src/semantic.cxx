@@ -28,12 +28,12 @@ const ScalarType& scalarType(ScalarType::Name name)
 
 bool typeMismatch(const Type* actual, const Type& expected)
 {
-    return actual != nullptr && !sameType(*actual, expected);
+    return actual != nullptr && *actual != expected;
 }
 
 bool hasScalarType(const Type* type, ScalarType::Name name)
 {
-    return type != nullptr && !isArrayType(*type) && baseType(*type)._name == name;
+    return type != nullptr && !type->isArray() && type->base()._name == name;
 }
 
 std::optional<double> constantReal(const Expression& expression)
@@ -193,7 +193,7 @@ void SemanticAnalyzer::visit(Sequence& sequence)
 
 void SemanticAnalyzer::visit(Dim& dim)
 {
-    if( !isArrayType(*dim._type) )
+    if( !dim._type->isArray() )
         return;
 
     const auto& array = static_cast<ArrayType&>(*dim._type);
@@ -231,8 +231,8 @@ void SemanticAnalyzer::visit(Let& let)
 
     const auto& symbol = _symbols.symbol(*target);
     const auto& declaredType = *symbol.type;
-    const auto arrayTarget = isArrayType(declaredType);
-    const Type& targetType = let._index && arrayTarget ? baseType(declaredType) : declaredType;
+    const auto arrayTarget = declaredType.isArray();
+    const Type& targetType = let._index && arrayTarget ? declaredType.base() : declaredType;
     bool validTarget = true;
     if( let._index && !arrayTarget ) {
         report(*let._variable, std::format("'{}' փոփոխականը զանգված չէ։", let._variable->_name));
@@ -430,7 +430,7 @@ void SemanticAnalyzer::visit(Binary& binary)
             const auto leftScalar = requireScalar(*binary._left);
             const auto rightScalar = requireScalar(*binary._right);
             const auto typesKnown = leftType != nullptr && rightType != nullptr;
-            const auto typesMatch = typesKnown && sameType(*leftType, *rightType);
+            const auto typesMatch = typesKnown && *leftType == *rightType;
             if( leftScalar && rightScalar && typesKnown && !typesMatch )
                 report(binary, std::format("'{}' գործողության օպերանդները պետք է լինեն նույն տիպի։", binary._operation));
             type = &scalarType(ScalarType::Name::Bool);
@@ -479,12 +479,12 @@ void SemanticAnalyzer::visit(Binary& binary)
             break;
         }
         case Operation::Index: {
-            const auto array = leftType != nullptr && isArrayType(*leftType);
+            const auto array = leftType != nullptr && leftType->isArray();
             if( leftType != nullptr && !array )
                 report(*binary._left, "Ինդեքսավորվող արտահայտությունը զանգված չէ։");
             validateIndex(*binary._right);
             if( array )
-                type = &baseType(*leftType);
+                type = &leftType->base();
             break;
         }
         case Operation::Not:
@@ -686,8 +686,8 @@ void SemanticAnalyzer::validateArguments(const Node& node, std::string_view name
             continue;
         }
 
-        if( isArrayType(*parameterType) ) {
-            if( !isArrayType(*argumentType) ) {
+        if( parameterType->isArray() ) {
+            if( !argumentType->isArray() ) {
                 report(*argument, "Սպասվում է զանգվածային արգումենտ։");
                 continue;
             }
@@ -714,7 +714,7 @@ const Type* SemanticAnalyzer::expressionType(Expression& expression)
 bool SemanticAnalyzer::isArrayExpression(const Expression& expression) const
 {
     const auto type = _model.type(expression.id());
-    return type != nullptr && isArrayType(*type);
+    return type != nullptr && type->isArray();
 }
 
 bool SemanticAnalyzer::requireScalar(const Expression& expression)

@@ -168,8 +168,9 @@ template<>
 struct formatter<avium::Type> : formatter<string_view> {
     format_context::iterator format(const avium::Type& type, format_context& context) const
     {
-        const auto base = std::format("{}", avium::baseType(type)._name);
-        const auto value = avium::isArrayType(type) ? base + "[]" : base;
+        auto value = std::format("{}", type.base()._name);
+        if( type.isArray() )
+            value += "[]";
         return formatter<string_view>::format(value, context);
     }
 };

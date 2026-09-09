@@ -139,8 +139,8 @@ TEST_CASE("Semantic analyzer declares subroutine signatures", "[semantic]")
     REQUIRE(symbol.subroutine->parameters.size() == 1);
     const auto* parameterType = symbol.subroutine->parameters[0];
     REQUIRE(parameterType != nullptr);
-    CHECK(isArrayType(*parameterType));
-    CHECK(baseType(*parameterType)._name == ScalarType::Name::Text);
+    CHECK(parameterType->kind == NodeKind::ArrayType);
+    CHECK(static_cast<const ArrayType&>(*parameterType)._base->_name == ScalarType::Name::Text);
 }
 
 TEST_CASE("Semantic analyzer rejects duplicate subroutine names", "[semantic]")
@@ -301,7 +301,7 @@ TEST_CASE("Semantic analyzer accepts a compatible scalar assignment", "[semantic
 
     REQUIRE(analyzer.analyze(*program));
     REQUIRE(model.type(numberId) != nullptr);
-    CHECK(baseType(*model.type(numberId))._name == ScalarType::Name::Real);
+    CHECK(static_cast<const ScalarType&>(*model.type(numberId))._name == ScalarType::Name::Real);
 }
 
 TEST_CASE("Successful semantic analysis types every expression", "[semantic]")
@@ -787,7 +787,7 @@ TEST_CASE("Array access has the array element type", "[semantic]")
 
     REQUIRE(analyzer.analyze(*program));
     REQUIRE(model.type(accessId) != nullptr);
-    CHECK(baseType(*model.type(accessId))._name == ScalarType::Name::Text);
+    CHECK(static_cast<const ScalarType&>(*model.type(accessId))._name == ScalarType::Name::Text);
 }
 
 TEST_CASE("Semantic analyzer rejects indexing a scalar expression", "[semantic]")
@@ -858,7 +858,7 @@ TEST_CASE("Semantic analyzer binds valid procedure and function calls", "[semant
     CHECK(model.symbol(callId) == model.symbol(printMessageId));
     CHECK(model.symbol(applyId) == model.symbol(doubleValueId));
     REQUIRE(model.type(applyId) != nullptr);
-    CHECK(baseType(*model.type(applyId))._name == ScalarType::Name::Real);
+    CHECK(static_cast<const ScalarType&>(*model.type(applyId))._name == ScalarType::Name::Real);
 }
 
 TEST_CASE("Semantic analyzer requires a declared call target", "[semantic]")
@@ -1071,5 +1071,5 @@ TEST_CASE("Signature checker supports additional builtin subroutines", "[semanti
     REQUIRE(analyzer.analyze(*program));
     CHECK(model.symbol(applyId) == builtin);
     REQUIRE(model.type(applyId) != nullptr);
-    CHECK(baseType(*model.type(applyId))._name == ScalarType::Name::Bool);
+    CHECK(static_cast<const ScalarType&>(*model.type(applyId))._name == ScalarType::Name::Bool);
 }

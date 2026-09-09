@@ -63,7 +63,7 @@ std::unique_ptr<llvm::Module> CodeGenerator::generate(const Program& program, st
 
 llvm::Type* CodeGenerator::llvmType(const Type& type) const
 {
-    switch( baseType(type)._name ) {
+    switch( type.base()._name ) {
         case ScalarType::Name::Bool:
             return llvm::Type::getInt1Ty(_context);
         case ScalarType::Name::Real:
@@ -96,7 +96,7 @@ void CodeGenerator::declareSubroutines(const Program& program)
         std::vector<llvm::Type*> parameterTypes;
         parameterTypes.reserve(signature.parameters.size());
         for( const auto parameterType : signature.parameters ) {
-            if( isArrayType(*parameterType) )
+            if( parameterType->isArray() )
                 parameterTypes.push_back(llvm::PointerType::get(_context, 0));
             else
                 parameterTypes.push_back(llvmType(*parameterType));
@@ -136,7 +136,7 @@ void CodeGenerator::allocateParameters(const Subroutine& subroutine, llvm::Funct
         const auto& symbol = _symbols.symbol(id);
         argument->setName(parameter->_name);
 
-        if( isArrayType(*symbol.type) ) {
+        if( symbol.type->isArray() ) {
             _storage.emplace(id, &*argument);
         }
         else {
@@ -184,7 +184,7 @@ void CodeGenerator::allocateVariable(SymbolId id)
         return;
 
     const auto& symbol = _symbols.symbol(id);
-    auto* type = isArrayType(*symbol.type) ? static_cast<llvm::Type*>(arrayType()) : llvmType(*symbol.type);
+    auto* type = symbol.type->isArray() ? static_cast<llvm::Type*>(arrayType()) : llvmType(*symbol.type);
     auto* address = _builder.CreateAlloca(type, nullptr, symbol.name);
     auto* initialValue = llvm::Constant::getNullValue(type);
     _builder.CreateStore(initialValue, address);

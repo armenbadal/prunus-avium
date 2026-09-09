@@ -227,9 +227,18 @@ public:
     const std::vector<Statement::Ptr> _items;
 };
 
+class ScalarType;
+
 class Type : public Node {
 public:
     using Ptr = std::unique_ptr<Type>;
+
+    bool isArray() const noexcept
+    {
+        return kind == NodeKind::ArrayType;
+    }
+
+    virtual const ScalarType& base() const noexcept = 0;
 
 protected:
     Type(NodeKind kind, Position line)
@@ -254,6 +263,11 @@ public:
 
     using Ptr = std::unique_ptr<ScalarType>;
 
+    const ScalarType& base() const noexcept override
+    {
+        return *this;
+    }
+
     const Name _name;
 };
 
@@ -268,6 +282,11 @@ public:
 
     using Ptr = std::unique_ptr<ArrayType>;
 
+    const ScalarType& base() const noexcept override
+    {
+        return *_base;
+    }
+
     bool isOpen() const noexcept
     {
         return _size == nullptr;
@@ -277,21 +296,9 @@ public:
     const Expression::Ptr _size;
 };
 
-inline bool isArrayType(const Type& type) noexcept
+inline bool operator==(const Type& left, const Type& right) noexcept
 {
-    return type.kind == NodeKind::ArrayType;
-}
-
-inline const ScalarType& baseType(const Type& type) noexcept
-{
-    if( type.kind == NodeKind::ScalarType )
-        return static_cast<const ScalarType&>(type);
-    return *static_cast<const ArrayType&>(type)._base;
-}
-
-inline bool sameType(const Type& left, const Type& right) noexcept
-{
-    return isArrayType(left) == isArrayType(right) && baseType(left)._name == baseType(right)._name;
+    return left.isArray() == right.isArray() && left.base()._name == right.base()._name;
 }
 
 class Dim final : public Statement {
