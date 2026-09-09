@@ -5,9 +5,9 @@
 
 namespace avium {
 
-void AstLisp::emit(Program::Ptr node, std::ostream& output)
+void AstLisp::emit(Program& node, std::ostream& output)
 {
-    output << visit(*node) << '\n';
+    output << visit(node) << '\n';
 }
 
 std::string AstLisp::visit(Boolean& node)
