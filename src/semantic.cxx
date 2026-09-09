@@ -167,7 +167,7 @@ void SemanticAnalyzer::visit(Dim& dim)
         return;
     }
 
-    const auto sizeType = expressionType(dim._size);
+    const auto sizeType = expressionType(*dim._size);
     const auto scalarSize = requireScalar(*dim._size);
     const auto wrongSizeType = scalarSize && typeMismatch(sizeType, TypeName::Real);
     if( wrongSizeType )
@@ -187,8 +187,8 @@ void SemanticAnalyzer::visit(Let& let)
 {
     const auto target = resolveVariable(*let._variable);
     if( let._index )
-        validateIndex(let._index);
-    const auto valueType = expressionType(let._value);
+        validateIndex(*let._index);
+    const auto valueType = expressionType(*let._value);
 
     if( !target.has_value() )
         return;
@@ -224,7 +224,7 @@ void SemanticAnalyzer::visit(If& conditional)
 
 void SemanticAnalyzer::visit(IfBranch& branch)
 {
-    const auto conditionType = expressionType(branch._condition);
+    const auto conditionType = expressionType(*branch._condition);
     const auto scalarCondition = requireScalar(*branch._condition);
     const auto wrongConditionType = scalarCondition && typeMismatch(conditionType, TypeName::Bool);
     if( wrongConditionType )
@@ -234,7 +234,7 @@ void SemanticAnalyzer::visit(IfBranch& branch)
 
 void SemanticAnalyzer::visit(While& loop)
 {
-    const auto conditionType = expressionType(loop._condition);
+    const auto conditionType = expressionType(*loop._condition);
     const auto scalarCondition = requireScalar(*loop._condition);
     const auto wrongConditionType = scalarCondition && typeMismatch(conditionType, TypeName::Bool);
     if( wrongConditionType )
@@ -246,19 +246,19 @@ void SemanticAnalyzer::visit(For& loop)
 {
     visit(*loop._parameter);
 
-    const auto beginType = expressionType(loop._begin);
+    const auto beginType = expressionType(*loop._begin);
     const auto scalarBegin = requireScalar(*loop._begin);
     const auto wrongBeginType = scalarBegin && typeMismatch(beginType, TypeName::Real);
     if( wrongBeginType )
         report(*loop._begin, std::format("FOR-ի սկզբնական արժեքը պետք է լինի REAL, բայց ստացվել է {}։", beginType));
 
-    const auto endType = expressionType(loop._end);
+    const auto endType = expressionType(*loop._end);
     const auto scalarEnd = requireScalar(*loop._end);
     const auto wrongEndType = scalarEnd && typeMismatch(endType, TypeName::Real);
     if( wrongEndType )
         report(*loop._end, std::format("FOR-ի վերջնական արժեքը պետք է լինի REAL, բայց ստացվել է {}։", endType));
 
-    const auto stepType = expressionType(loop._step);
+    const auto stepType = expressionType(*loop._step);
     const auto scalarStep = requireScalar(*loop._step);
     const auto wrongStepType = scalarStep && typeMismatch(stepType, TypeName::Real);
     if( wrongStepType )
@@ -272,7 +272,7 @@ void SemanticAnalyzer::visit(For& loop)
 void SemanticAnalyzer::visit(Call& call)
 {
     for( const auto& argument : call._arguments )
-        expressionType(argument);
+        expressionType(*argument);
 
     const auto id = resolveSubroutine(call, call._callee);
     if( !id.has_value() )
@@ -306,7 +306,7 @@ void SemanticAnalyzer::visit(Variable& variable)
 
 void SemanticAnalyzer::visit(Unary& unary)
 {
-    const auto operandType = expressionType(unary._operand);
+    const auto operandType = expressionType(*unary._operand);
     const auto scalar = requireScalar(*unary._operand);
 
     switch( unary._operation ) {
@@ -333,8 +333,8 @@ void SemanticAnalyzer::visit(Unary& unary)
 
 void SemanticAnalyzer::visit(Binary& binary)
 {
-    const auto leftType = expressionType(binary._left);
-    const auto rightType = expressionType(binary._right);
+    const auto leftType = expressionType(*binary._left);
+    const auto rightType = expressionType(*binary._right);
 
     TypeName type = TypeName::Unknown;
     switch( binary._operation ) {
@@ -410,7 +410,7 @@ void SemanticAnalyzer::visit(Binary& binary)
         case Operation::Index:
             if( leftType != TypeName::Unknown && !isArrayExpression(*binary._left) )
                 report(*binary._left, "Ինդեքսավորվող արտահայտությունը զանգված չէ։");
-            validateIndex(binary._right);
+            validateIndex(*binary._right);
             type = leftType;
             break;
         case Operation::Not:
@@ -423,7 +423,7 @@ void SemanticAnalyzer::visit(Binary& binary)
 void SemanticAnalyzer::visit(Apply& apply)
 {
     for( const auto& argument : apply._arguments )
-        expressionType(argument);
+        expressionType(*argument);
 
     const auto id = resolveSubroutine(apply, apply._callee);
     if( !id.has_value() )
@@ -615,7 +615,7 @@ void SemanticAnalyzer::validateArguments(const Node& node, std::string_view name
     const auto commonCount = std::min(actualCount, expectedCount);
     for( std::size_t index = 0; index < commonCount; ++index ) {
         const auto& argument = arguments[index];
-        const auto argumentType = expressionType(argument);
+        const auto argumentType = expressionType(*argument);
         const auto& parameter = signature.parameters[index];
 
         if( argumentType == TypeName::Unknown )
@@ -641,12 +641,12 @@ void SemanticAnalyzer::validateArguments(const Node& node, std::string_view name
     }
 }
 
-TypeName SemanticAnalyzer::expressionType(const Expression::Ptr& expression)
+TypeName SemanticAnalyzer::expressionType(Expression& expression)
 {
-    if( const auto type = _model.type(expression->id()) )
+    if( const auto type = _model.type(expression.id()) )
         return *type;
-    visit(*expression);
-    return _model.type(expression->id()).value_or(TypeName::Unknown);
+    visit(expression);
+    return _model.type(expression.id()).value_or(TypeName::Unknown);
 }
 
 bool SemanticAnalyzer::isArrayExpression(const Expression& expression) const
@@ -665,13 +665,13 @@ bool SemanticAnalyzer::requireScalar(const Expression& expression)
     return false;
 }
 
-void SemanticAnalyzer::validateIndex(const Expression::Ptr& index)
+void SemanticAnalyzer::validateIndex(Expression& index)
 {
     const auto indexType = expressionType(index);
-    const auto scalarIndex = requireScalar(*index);
+    const auto scalarIndex = requireScalar(index);
     const auto wrongIndexType = scalarIndex && typeMismatch(indexType, TypeName::Real);
     if( wrongIndexType )
-        report(*index, std::format("Զանգվածի ինդեքսը պետք է լինի REAL, բայց ստացվել է {}։", indexType));
+        report(index, std::format("Զանգվածի ինդեքսը պետք է լինի REAL, բայց ստացվել է {}։", indexType));
 }
 
 ParameterInfo SemanticAnalyzer::parameterInfo(const Dim& parameter) const

@@ -2,6 +2,7 @@
 
 #include "ast.hxx"
 #include "astvisitor.hxx"
+#include "test_ast.hxx"
 
 #include <optional>
 #include <string>
@@ -11,6 +12,7 @@
 namespace {
 
 using namespace avium;
+using test::NodeList;
 
 class NodeKindVisitor final : public ASTVisitor<NodeKindVisitor, NodeKind> {
 public:
@@ -37,7 +39,7 @@ public:
 
 Sequence::Ptr emptySequence(Position line = 1)
 {
-    return node<Sequence>(std::vector<Statement::Ptr>{}, line);
+    return node<Sequence>(NodeList<Statement>{}, line);
 }
 
 } // namespace
@@ -49,14 +51,15 @@ TEST_CASE("AST հանգույցի հիմնական տվյալները", "[ast]")
     CHECK(empty.line == 0);
     CHECK(empty.id() == 0);
 
-    const auto first = node<Number>(1.0, 4);
+    auto first = node<Number>(1.0, 4);
     const auto second = node<Number>(2.0, 5);
-    const Expression::Ptr expression = first;
+    const auto firstId = first->id();
+    Expression::Ptr expression = std::move(first);
 
-    CHECK(first->kind == NodeKind::Number);
-    CHECK(first->line == 4);
-    CHECK(first->id() < second->id());
+    CHECK_FALSE(first);
     CHECK(expression->kind == NodeKind::Number);
+    CHECK(expression->line == 4);
+    CHECK(firstId < second->id());
 }
 
 TEST_CASE("AST-ի պարզ արտահայտությունները պահում են իրենց արժեքը", "[ast]")
@@ -81,23 +84,30 @@ TEST_CASE("AST-ի պարզ արտահայտությունները պահում �
 
 TEST_CASE("AST-ը ներկայացնում է կազմական արտահայտությունները", "[ast]")
 {
-    const auto operand = node<Number>(2.0, 7);
-    const auto unary = node<Unary>(Operation::Sub, operand, 7);
-    const auto right = node<Number>(3.0, 7);
-    const auto binary = node<Binary>(Operation::Pow, unary, right, 7);
-    const auto apply = node<Apply>("SQR", std::vector<Expression::Ptr>{binary}, 7);
-    const auto quotient = node<Binary>(Operation::Quot, operand, right, 8);
-    const auto concatenation = node<Binary>(Operation::Conc, operand, right, 9);
-    const auto index = node<Binary>(Operation::Index, operand, right, 10);
+    auto operand = node<Number>(2.0, 7);
+    const auto* operandNode = operand.get();
+    auto unary = node<Unary>(Operation::Sub, std::move(operand), 7);
+    const auto* unaryNode = unary.get();
+    auto right = node<Number>(3.0, 7);
+    const auto* rightNode = right.get();
+    auto binary = node<Binary>(Operation::Pow, std::move(unary), std::move(right), 7);
+    const auto* binaryNode = binary.get();
+    const auto apply = node<Apply>("SQR", NodeList<Expression>{std::move(binary)}, 7);
+    const auto quotient = node<Binary>(Operation::Quot, node<Number>(4.0, 8),
+        node<Number>(2.0, 8), 8);
+    const auto concatenation = node<Binary>(Operation::Conc, node<Text>("a", 9),
+        node<Text>("b", 9), 9);
+    const auto index = node<Binary>(Operation::Index, node<Variable>("items", 10),
+        node<Number>(0.0, 10), 10);
 
-    CHECK(unary->_operation == Operation::Sub);
-    CHECK(unary->_operand == operand);
-    CHECK(binary->_operation == Operation::Pow);
-    CHECK(binary->_left == unary);
-    CHECK(binary->_right == right);
+    CHECK(unaryNode->_operation == Operation::Sub);
+    CHECK(unaryNode->_operand.get() == operandNode);
+    CHECK(binaryNode->_operation == Operation::Pow);
+    CHECK(binaryNode->_left.get() == unaryNode);
+    CHECK(binaryNode->_right.get() == rightNode);
     CHECK(apply->_callee == "SQR");
     REQUIRE(apply->_arguments.size() == 1);
-    CHECK(apply->_arguments.front() == binary);
+    CHECK(apply->_arguments.front().get() == binaryNode);
     CHECK(quotient->_operation == Operation::Quot);
     CHECK(concatenation->_operation == Operation::Conc);
     CHECK(index->_operation == Operation::Index);
@@ -108,8 +118,9 @@ TEST_CASE("DIM-ն ու Parameter alias-ը ներկայացնում են հայտ
     static_assert(std::is_same_v<Parameter, Dim>);
 
     const auto scalar = node<Dim>("total", nullptr, TypeName::Real, false, 11);
-    const auto size = node<Number>(12.0, 12);
-    const auto array = node<Dim>("items", size, TypeName::Text, true, 12);
+    auto size = node<Number>(12.0, 12);
+    const auto* sizeNode = size.get();
+    const auto array = node<Dim>("items", std::move(size), TypeName::Text, true, 12);
     const auto parameter = node<Parameter>("values", nullptr, TypeName::Bool, true, 13);
 
     CHECK(scalar->_name == "total");
@@ -118,7 +129,7 @@ TEST_CASE("DIM-ն ու Parameter alias-ը ներկայացնում են հայտ
     CHECK_FALSE(scalar->_isArray);
 
     CHECK(array->_name == "items");
-    CHECK(array->_size == size);
+    CHECK(array->_size.get() == sizeNode);
     CHECK(array->_type == TypeName::Text);
     CHECK(array->_isArray);
 
@@ -130,98 +141,127 @@ TEST_CASE("DIM-ն ու Parameter alias-ը ներկայացնում են հայտ
 
 TEST_CASE("LET-ը պահում է պարզ և ինդեքսավորված վերագրումները", "[ast]")
 {
-    const auto total = node<Variable>("total", 14);
-    const auto value = node<Number>(42.0, 14);
-    const auto simple = node<Let>(total, nullptr, value, 14);
+    auto total = node<Variable>("total", 14);
+    const auto* totalNode = total.get();
+    auto value = node<Number>(42.0, 14);
+    const auto* valueNode = value.get();
+    const auto simple = node<Let>(std::move(total), nullptr, std::move(value), 14);
 
-    const auto items = node<Variable>("items", 15);
-    const auto index = node<Number>(1.0, 15);
-    const auto text = node<Text>("ok", 15);
-    const auto indexed = node<Let>(items, index, text, 15);
+    auto items = node<Variable>("items", 15);
+    const auto* itemsNode = items.get();
+    auto index = node<Number>(1.0, 15);
+    const auto* indexNode = index.get();
+    auto text = node<Text>("ok", 15);
+    const auto* textNode = text.get();
+    const auto indexed = node<Let>(
+        std::move(items), std::move(index), std::move(text), 15);
 
-    CHECK(simple->_variable == total);
+    CHECK(simple->_variable.get() == totalNode);
     CHECK_FALSE(simple->_index);
-    CHECK(simple->_value == value);
+    CHECK(simple->_value.get() == valueNode);
 
-    CHECK(indexed->_variable == items);
-    CHECK(indexed->_index == index);
-    CHECK(indexed->_value == text);
+    CHECK(indexed->_variable.get() == itemsNode);
+    CHECK(indexed->_index.get() == indexNode);
+    CHECK(indexed->_value.get() == textNode);
 }
 
 TEST_CASE("AST-ը պահում է ղեկավարող կառուցվածքները", "[ast]")
 {
-    const auto condition = node<Boolean>(true, 20);
-    const auto thenBody = emptySequence(21);
-    const auto elseBody = emptySequence(22);
-    const auto branch = node<IfBranch>(condition, thenBody, 20);
-    const auto ifStatement = node<If>(std::vector<IfBranch::Ptr>{branch}, elseBody, 20);
-    const auto whileStatement = node<While>(condition, thenBody, 23);
+    auto condition = node<Boolean>(true, 20);
+    const auto* conditionNode = condition.get();
+    auto thenBody = emptySequence(21);
+    const auto* thenBodyNode = thenBody.get();
+    auto branch = node<IfBranch>(std::move(condition), std::move(thenBody), 20);
+    const auto* branchNode = branch.get();
+    auto elseBody = emptySequence(22);
+    const auto* elseBodyNode = elseBody.get();
+    const auto ifStatement = node<If>(NodeList<IfBranch>{std::move(branch)}, std::move(elseBody), 20);
+    const auto whileStatement = node<While>(node<Boolean>(true, 23), emptySequence(23), 23);
 
-    const auto parameter = node<Variable>("i", 24);
-    const auto begin = node<Number>(1.0, 24);
-    const auto end = node<Number>(10.0, 24);
-    const auto step = node<Number>(2.0, 24);
-    const auto forStatement = node<For>(parameter, begin, end, step, thenBody, 24);
+    auto parameter = node<Variable>("i", 24);
+    const auto* parameterNode = parameter.get();
+    auto begin = node<Number>(1.0, 24);
+    const auto* beginNode = begin.get();
+    auto end = node<Number>(10.0, 24);
+    const auto* endNode = end.get();
+    auto step = node<Number>(2.0, 24);
+    const auto* stepNode = step.get();
+    auto forBody = emptySequence(24);
+    const auto* forBodyNode = forBody.get();
+    const auto forStatement = node<For>(std::move(parameter), std::move(begin),
+        std::move(end), std::move(step), std::move(forBody), 24);
 
     REQUIRE(ifStatement->_branches.size() == 1);
-    CHECK(ifStatement->_branches.front() == branch);
-    CHECK(ifStatement->_alternative == elseBody);
-    CHECK(branch->_condition == condition);
-    CHECK(branch->_body == thenBody);
-    CHECK(whileStatement->_condition == condition);
-    CHECK(whileStatement->_body == thenBody);
-    CHECK(forStatement->_parameter == parameter);
-    CHECK(forStatement->_begin == begin);
-    CHECK(forStatement->_end == end);
-    CHECK(forStatement->_step == step);
-    CHECK(forStatement->_body == thenBody);
+    CHECK(ifStatement->_branches.front().get() == branchNode);
+    CHECK(ifStatement->_alternative.get() == elseBodyNode);
+    CHECK(branchNode->_condition.get() == conditionNode);
+    CHECK(branchNode->_body.get() == thenBodyNode);
+    CHECK(whileStatement->_condition);
+    CHECK(whileStatement->_body);
+    CHECK(forStatement->_parameter.get() == parameterNode);
+    CHECK(forStatement->_begin.get() == beginNode);
+    CHECK(forStatement->_end.get() == endNode);
+    CHECK(forStatement->_step.get() == stepNode);
+    CHECK(forStatement->_body.get() == forBodyNode);
 }
 
 TEST_CASE("CALL, ենթածրագիրը և ծրագիրը պահպանում են իրենց կառուցվածքը", "[ast]")
 {
-    const auto argument = node<Text>("Բարև", 30);
-    const auto call = node<Call>("Print", std::vector<Expression::Ptr>{argument}, 30);
-    const auto body = node<Sequence>(std::vector<Statement::Ptr>{call}, 30);
-    const auto parameter = node<Parameter>("items", nullptr, TypeName::Text, true, 29);
-    const auto procedure = node<Subroutine>(
-        "Main", std::vector<Parameter::Ptr>{}, std::nullopt, body, 28);
-    const auto function = node<Subroutine>(
-        "Count", std::vector<Parameter::Ptr>{parameter}, TypeName::Real, emptySequence(31), 29);
-    const auto program = node<Program>(std::vector<Subroutine::Ptr>{procedure, function}, 28);
+    auto argument = node<Text>("Բարև", 30);
+    const auto* argumentNode = argument.get();
+    auto call = node<Call>("Print", NodeList<Expression>{std::move(argument)}, 30);
+    const auto* callNode = call.get();
+    auto body = node<Sequence>(NodeList<Statement>{std::move(call)}, 30);
+    const auto* bodyNode = body.get();
+    auto procedure = node<Subroutine>(
+        "Main", NodeList<Parameter>{}, std::nullopt, std::move(body), 28);
+    const auto* procedureNode = procedure.get();
+    auto parameter = node<Parameter>("items", nullptr, TypeName::Text, true, 29);
+    const auto* parameterNode = parameter.get();
+    auto function = node<Subroutine>("Count", NodeList<Parameter>{std::move(parameter)},
+        TypeName::Real, emptySequence(31), 29);
+    const auto* functionNode = function.get();
+    const auto program = node<Program>(
+        NodeList<Subroutine>{std::move(procedure), std::move(function)}, 28);
 
-    CHECK(call->_callee == "Print");
-    REQUIRE(call->_arguments.size() == 1);
-    CHECK(call->_arguments.front() == argument);
-    REQUIRE(body->_items.size() == 1);
-    CHECK(body->_items.front() == call);
+    CHECK(callNode->_callee == "Print");
+    REQUIRE(callNode->_arguments.size() == 1);
+    CHECK(callNode->_arguments.front().get() == argumentNode);
+    REQUIRE(bodyNode->_items.size() == 1);
+    CHECK(bodyNode->_items.front().get() == callNode);
 
-    CHECK_FALSE(procedure->_returnType.has_value());
-    REQUIRE(function->_returnType.has_value());
-    CHECK(*function->_returnType == TypeName::Real);
-    REQUIRE(function->_parameters.size() == 1);
-    CHECK(function->_parameters.front() == parameter);
+    CHECK_FALSE(procedureNode->_returnType.has_value());
+    REQUIRE(functionNode->_returnType.has_value());
+    CHECK(*functionNode->_returnType == TypeName::Real);
+    REQUIRE(functionNode->_parameters.size() == 1);
+    CHECK(functionNode->_parameters.front().get() == parameterNode);
     REQUIRE(program->_subroutines.size() == 2);
-    CHECK(program->_subroutines.front() == procedure);
-    CHECK(program->_subroutines.back() == function);
+    CHECK(program->_subroutines.front().get() == procedureNode);
+    CHECK(program->_subroutines.back().get() == functionNode);
 }
 
 TEST_CASE("ASTVisitor-ը NodeKind-ով ուղարկում է ճիշտ overload-ին", "[ast][visitor]")
 {
-    const auto number = node<Number>(1.0, 40);
-    const auto variable = node<Variable>("x", 40);
-    const auto let = node<Let>(variable, nullptr, number, 40);
-    const auto sequence = node<Sequence>(std::vector<Statement::Ptr>{let}, 40);
-    const auto subroutine = node<Subroutine>(
-        "Main", std::vector<Parameter::Ptr>{}, std::nullopt, sequence, 40);
-    const auto program = node<Program>(std::vector<Subroutine::Ptr>{subroutine}, 40);
+    auto number = node<Number>(1.0, 40);
+    auto* numberNode = number.get();
+    auto variable = node<Variable>("x", 40);
+    auto* variableNode = variable.get();
+    auto let = node<Let>(std::move(variable), nullptr, std::move(number), 40);
+    auto* letNode = let.get();
+    auto sequence = node<Sequence>(NodeList<Statement>{std::move(let)}, 40);
+    auto* sequenceNode = sequence.get();
+    auto subroutine = node<Subroutine>(
+        "Main", NodeList<Parameter>{}, std::nullopt, std::move(sequence), 40);
+    auto* subroutineNode = subroutine.get();
+    const auto program = node<Program>(NodeList<Subroutine>{std::move(subroutine)}, 40);
     Node empty;
     NodeKindVisitor visitor;
 
-    CHECK(visitor.visit(*number) == NodeKind::Number);
-    CHECK(visitor.visit(*variable) == NodeKind::Variable);
-    CHECK(visitor.visit(*let) == NodeKind::Let);
-    CHECK(visitor.visit(*sequence) == NodeKind::Sequence);
-    CHECK(visitor.visit(*subroutine) == NodeKind::Subroutine);
+    CHECK(visitor.visit(*numberNode) == NodeKind::Number);
+    CHECK(visitor.visit(*variableNode) == NodeKind::Variable);
+    CHECK(visitor.visit(*letNode) == NodeKind::Let);
+    CHECK(visitor.visit(*sequenceNode) == NodeKind::Sequence);
+    CHECK(visitor.visit(*subroutineNode) == NodeKind::Subroutine);
     CHECK(visitor.visit(*program) == NodeKind::Program);
     CHECK(visitor.visit(empty) == NodeKind::Empty);
 }
