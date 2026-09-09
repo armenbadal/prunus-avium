@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include <memory>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -12,12 +11,6 @@ namespace avium {
 
 using Position = std::uint32_t;
 using NodeId = std::uint64_t;
-
-enum class TypeName : std::uint8_t {
-    Bool,
-    Real,
-    Text,
-};
 
 enum class NodeKind : std::uint8_t {
     Empty,
@@ -29,6 +22,9 @@ enum class NodeKind : std::uint8_t {
     Unary,
     Binary,
     Apply,
+
+    ScalarType,
+    ArrayType,
 
     Sequence,
     Dim,
@@ -216,19 +212,82 @@ public:
     const std::vector<Statement::Ptr> _items;
 };
 
+class Type : public Node {
+public:
+    using Ptr = std::unique_ptr<Type>;
+
+protected:
+    Type(NodeKind kind, Position line)
+        : Node{kind, line}
+    {
+    }
+};
+
+class ScalarType final : public Type {
+public:
+    enum class Name {
+        Real,
+        Text,
+        Bool,
+    };
+
+    ScalarType(Name name, Position line)
+        : Type{NodeKind::ScalarType, line}, _name{name}
+    {
+    }
+
+    using Ptr = std::unique_ptr<ScalarType>;
+
+    const Name _name;
+};
+
+class ArrayType final : public Type {
+public:
+    ArrayType(ScalarType::Ptr base, Expression::Ptr size, Position line)
+        : Type{NodeKind::ArrayType, line}, _base{std::move(base)}, _size{std::move(size)}
+    {
+    }
+
+    using Ptr = std::unique_ptr<ArrayType>;
+
+    bool isOpen() const noexcept
+    {
+        return _size == nullptr;
+    }
+
+    const ScalarType::Ptr _base;
+    const Expression::Ptr _size;
+};
+
+inline bool isArrayType(const Type& type) noexcept
+{
+    return type.kind == NodeKind::ArrayType;
+}
+
+inline const ScalarType& baseType(const Type& type) noexcept
+{
+    if( type.kind == NodeKind::ScalarType )
+        return static_cast<const ScalarType&>(type);
+    return *static_cast<const ArrayType&>(type)._base;
+}
+
+inline bool sameType(const Type& left, const Type& right) noexcept
+{
+    return isArrayType(left) == isArrayType(right)
+        && baseType(left)._name == baseType(right)._name;
+}
+
 class Dim final : public Statement {
 public:
-    Dim(std::string_view name, Expression::Ptr size, TypeName type, bool isArray, Position line)
-        : Statement{NodeKind::Dim, line}, _name{name}, _size{std::move(size)}, _type{type}, _isArray{isArray}
+    Dim(std::string_view name, Type::Ptr type, Position line)
+        : Statement{NodeKind::Dim, line}, _name{name}, _type{std::move(type)}
     {
     }
 
     using Ptr = std::unique_ptr<Dim>;
 
     const std::string _name;
-    const Expression::Ptr _size;
-    const TypeName _type;
-    const bool _isArray{false};
+    const Type::Ptr _type;
 };
 
 using Parameter = Dim;
@@ -322,8 +381,8 @@ public:
 class Subroutine final : public Node {
 public:
     Subroutine(std::string_view name, std::vector<Parameter::Ptr> parameters,
-        std::optional<TypeName> returnType, Sequence::Ptr body, Position line)
-        : Node{NodeKind::Subroutine, line}, _name{name}, _parameters{std::move(parameters)}, _returnType{returnType}, _body{std::move(body)}
+        ScalarType::Ptr returnType, Sequence::Ptr body, Position line)
+        : Node{NodeKind::Subroutine, line}, _name{name}, _parameters{std::move(parameters)}, _returnType{std::move(returnType)}, _body{std::move(body)}
     {
     }
 
@@ -331,7 +390,7 @@ public:
 
     const std::string _name;
     const std::vector<Parameter::Ptr> _parameters;
-    const std::optional<TypeName> _returnType;
+    const ScalarType::Ptr _returnType;
     const Sequence::Ptr _body;
 };
 

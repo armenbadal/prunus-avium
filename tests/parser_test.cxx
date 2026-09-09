@@ -40,11 +40,17 @@ TEST_CASE("Parser parses a subroutine and its parameters", "[parser]")
     const auto& subroutine = result.program->_subroutines.front();
     CHECK(subroutine->_name == "Add");
     REQUIRE(subroutine->_parameters.size() == 2);
-    CHECK(subroutine->_parameters[0]->_type == TypeName::Real);
-    CHECK_FALSE(subroutine->_parameters[0]->_isArray);
-    CHECK(subroutine->_parameters[1]->_type == TypeName::Text);
-    CHECK(subroutine->_parameters[1]->_isArray);
-    CHECK(subroutine->_returnType == TypeName::Real);
+    REQUIRE(subroutine->_parameters[0]->_type->kind == NodeKind::ScalarType);
+    const auto& scalar = static_cast<const ScalarType&>(
+        *subroutine->_parameters[0]->_type);
+    CHECK(scalar._name == ScalarType::Name::Real);
+    REQUIRE(subroutine->_parameters[1]->_type->kind == NodeKind::ArrayType);
+    const auto& array = static_cast<const ArrayType&>(
+        *subroutine->_parameters[1]->_type);
+    CHECK(array._base->_name == ScalarType::Name::Text);
+    CHECK(array.isOpen());
+    REQUIRE(subroutine->_returnType);
+    CHECK(subroutine->_returnType->_name == ScalarType::Name::Real);
 }
 
 TEST_CASE("Parser preserves expression precedence", "[parser]")

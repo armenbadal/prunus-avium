@@ -69,15 +69,15 @@ Operation operation(Token token)
     }
 }
 
-TypeName typeName(Token token)
+ScalarType::Name typeName(Token token)
 {
     switch( token ) {
         case Token::Bool:
-            return TypeName::Bool;
+            return ScalarType::Name::Bool;
         case Token::Real:
-            return TypeName::Real;
+            return ScalarType::Name::Real;
         case Token::Text:
-            return TypeName::Text;
+            return ScalarType::Name::Text;
         default:
             std::unreachable();
     }
@@ -162,13 +162,13 @@ Subroutine::Ptr Parser::parseSubroutine()
         match(Token::RightPar);
     }
 
-    std::optional<TypeName> returnType;
+    ScalarType::Ptr returnType;
     if( _lookahead.is(Token::As) )
         returnType = parseType();
 
     auto body = parseSequence();
     parseBlockEnd(Token::Subroutine);
-    return node<Subroutine>(name, std::move(parameters), returnType, std::move(body), line);
+    return node<Subroutine>(name, std::move(parameters), std::move(returnType), std::move(body), line);
 }
 
 Parameter::Ptr Parser::parseParameter()
@@ -182,23 +182,30 @@ Parameter::Ptr Parser::parseParameter()
         isArray = true;
     }
 
-    const auto type = parseType();
-    if( !type.has_value() )
+    auto base = parseType();
+    if( !base )
         return {};
-    return node<Parameter>(name, nullptr, *type, isArray, line);
+
+    Type::Ptr parameterType;
+    if( isArray )
+        parameterType = node<ArrayType>(std::move(base), nullptr, line);
+    else
+        parameterType = std::move(base);
+    return node<Parameter>(name, std::move(parameterType), line);
 }
 
-std::optional<TypeName> Parser::parseType()
+ScalarType::Ptr Parser::parseType()
 {
     match(Token::As);
     if( !_lookahead.is(Token::Real, Token::Text, Token::Bool) ) {
         _diagnostics.mark(_lookahead.line, std::format("Սպասվում է տիպ (REAL | TEXT | BOOL), բայց հանդիպել է {}։", _lookahead));
-        return std::nullopt;
+        return nullptr;
     }
 
     const auto token = _lookahead.kind;
+    const auto line = _lookahead.line;
     match(token);
-    return typeName(token);
+    return node<ScalarType>(typeName(token), line);
 }
 
 Sequence::Ptr Parser::parseSequence()
@@ -276,10 +283,16 @@ Dim::Ptr Parser::parseDeclaration(bool sizeRequired)
         isArray = true;
     }
 
-    const auto type = parseType();
-    if( !type.has_value() )
+    auto base = parseType();
+    if( !base )
         return {};
-    return node<Dim>(name, std::move(size), *type, isArray, line);
+
+    Type::Ptr declarationType;
+    if( isArray )
+        declarationType = node<ArrayType>(std::move(base), std::move(size), line);
+    else
+        declarationType = std::move(base);
+    return node<Dim>(name, std::move(declarationType), line);
 }
 
 If::Ptr Parser::parseIf()

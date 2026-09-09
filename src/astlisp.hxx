@@ -26,6 +26,8 @@ public:
     std::string visit(For& node);
     std::string visit(Call& node);
 
+    std::string visit(ScalarType& node);
+    std::string visit(ArrayType& node);
     std::string visit(Apply& node);
     std::string visit(Binary& node);
     std::string visit(Unary& node);

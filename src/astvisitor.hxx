@@ -32,6 +32,10 @@ protected:
                 return derived().visit(static_cast<Call&>(value));
             case NodeKind::Apply:
                 return derived().visit(static_cast<Apply&>(value));
+            case NodeKind::ScalarType:
+                return derived().visit(static_cast<ScalarType&>(value));
+            case NodeKind::ArrayType:
+                return derived().visit(static_cast<ArrayType&>(value));
             case NodeKind::Binary:
                 return derived().visit(static_cast<Binary&>(value));
             case NodeKind::Unary:

@@ -27,7 +27,7 @@ private:
     Dim::Ptr parseDim();
     Dim::Ptr parseDeclaration(bool sizeRequired);
     Parameter::Ptr parseParameter();
-    std::optional<TypeName> parseType();
+    ScalarType::Ptr parseType();
     If::Ptr parseIf();
     IfBranch::Ptr parseIfBranch(Token keyword);
     While::Ptr parseWhile();

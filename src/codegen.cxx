@@ -35,10 +35,7 @@ std::string mangledName(std::string_view name)
 } // namespace
 
 CodeGenerator::CodeGenerator(llvm::LLVMContext& context, const SymbolTable& symbols, const SemanticModel& model)
-    : _context{context}
-    , _symbols{symbols}
-    , _model{model}
-    , _builder{context}
+    : _context{context}, _symbols{symbols}, _model{model}, _builder{context}
 {
 }
 
@@ -61,14 +58,14 @@ std::unique_ptr<llvm::Module> CodeGenerator::generate(const Program& program, st
     return std::move(_module);
 }
 
-llvm::Type* CodeGenerator::llvmType(TypeName type) const
+llvm::Type* CodeGenerator::llvmType(const Type& type) const
 {
-    switch( type ) {
-        case TypeName::Bool:
+    switch( baseType(type)._name ) {
+        case ScalarType::Name::Bool:
             return llvm::Type::getInt1Ty(_context);
-        case TypeName::Real:
+        case ScalarType::Name::Real:
             return llvm::Type::getDoubleTy(_context);
-        case TypeName::Text:
+        case ScalarType::Name::Text:
             return llvm::PointerType::get(_context, 0);
     }
     std::unreachable();
@@ -95,14 +92,14 @@ void CodeGenerator::declareSubroutines(const Program& program)
 
         std::vector<llvm::Type*> parameterTypes;
         parameterTypes.reserve(signature.parameters.size());
-        for( const auto& parameter : signature.parameters ) {
-            if( parameter.isArray )
+        for( const auto parameterType : signature.parameters ) {
+            if( isArrayType(*parameterType) )
                 parameterTypes.push_back(llvm::PointerType::get(_context, 0));
             else
-                parameterTypes.push_back(llvmType(*parameter.type));
+                parameterTypes.push_back(llvmType(*parameterType));
         }
 
-        auto* returnType = signature.returnType.has_value() ? llvmType(*signature.returnType) : llvm::Type::getVoidTy(_context);
+        auto* returnType = signature.returnType ? llvmType(*signature.returnType) : llvm::Type::getVoidTy(_context);
         auto* functionType = llvm::FunctionType::get(returnType, parameterTypes, false);
         const auto name = mangledName(signature.name);
         auto* function = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, name, *_module);
@@ -121,7 +118,7 @@ void CodeGenerator::defineSubroutine(const Subroutine& subroutine)
     allocateReturnValue(subroutine);
     allocateLocals(*subroutine._body);
 
-    if( subroutine._returnType.has_value() ) {
+    if( subroutine._returnType ) {
         const auto returnId = *_model.returnValue(subroutine.id());
         const auto& symbol = _symbols.symbol(returnId);
         auto* value = _builder.CreateLoad(llvmType(*symbol.type), _storage.at(returnId));
@@ -137,13 +134,14 @@ void CodeGenerator::allocateParameters(const Subroutine& subroutine, llvm::Funct
     auto argument = function.arg_begin();
     for( const auto& parameter : subroutine._parameters ) {
         const auto id = symbolId(*parameter);
+        const auto& symbol = _symbols.symbol(id);
         argument->setName(parameter->_name);
 
-        if( parameter->_isArray ) {
+        if( isArrayType(*symbol.type) ) {
             _storage.emplace(id, &*argument);
         }
         else {
-            auto* address = _builder.CreateAlloca(llvmType(parameter->_type), nullptr, parameter->_name);
+            auto* address = _builder.CreateAlloca(llvmType(*symbol.type), nullptr, parameter->_name);
             _builder.CreateStore(&*argument, address);
             _storage.emplace(id, address);
         }
@@ -195,7 +193,7 @@ void CodeGenerator::allocateVariable(SymbolId id)
         return;
 
     const auto& symbol = _symbols.symbol(id);
-    auto* type = symbol.isArray ? static_cast<llvm::Type*>(arrayType()) : llvmType(*symbol.type);
+    auto* type = isArrayType(*symbol.type) ? static_cast<llvm::Type*>(arrayType()) : llvmType(*symbol.type);
     auto* address = _builder.CreateAlloca(type, nullptr, symbol.name);
     auto* initialValue = llvm::Constant::getNullValue(type);
     _builder.CreateStore(initialValue, address);

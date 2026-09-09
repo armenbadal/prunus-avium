@@ -11,7 +11,6 @@
 #include <llvm/IR/Verifier.h>
 #include <llvm/Support/raw_ostream.h>
 
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -23,7 +22,7 @@ TEST_CASE("Code generator creates a valid entry point for an empty Main",
 {
     auto body = node<Sequence>(NodeList<Statement>{}, 1);
     auto main = node<Subroutine>("Main", NodeList<Parameter>{},
-        std::nullopt, std::move(body), 1);
+        nullptr, std::move(body), 1);
     auto program = node<Program>(NodeList<Subroutine>{std::move(main)}, 1);
 
     SymbolTable symbols;
@@ -71,17 +70,18 @@ TEST_CASE("Code generator lowers subroutine signatures and parameter storage",
 {
     auto mainBody = node<Sequence>(NodeList<Statement>{}, 1);
     auto main = node<Subroutine>("Main", NodeList<Parameter>{},
-        std::nullopt, std::move(mainBody), 1);
+        nullptr, std::move(mainBody), 1);
 
     NodeList<Parameter> parameters{
-        node<Parameter>("flag", nullptr, TypeName::Bool, false, 2),
-        node<Parameter>("number", nullptr, TypeName::Real, false, 2),
-        node<Parameter>("label", nullptr, TypeName::Text, false, 2),
-        node<Parameter>("items", nullptr, TypeName::Real, true, 2),
+        test::scalarDeclaration<Parameter>("flag", ScalarType::Name::Bool, 2),
+        test::scalarDeclaration<Parameter>("number", ScalarType::Name::Real, 2),
+        test::scalarDeclaration<Parameter>("label", ScalarType::Name::Text, 2),
+        test::arrayDeclaration<Parameter>("items", nullptr, ScalarType::Name::Real, 2),
     };
     auto body = node<Sequence>(NodeList<Statement>{}, 2);
+    auto returnType = node<ScalarType>(ScalarType::Name::Text, 2);
     auto transform = node<Subroutine>("Transform", std::move(parameters),
-        TypeName::Text, std::move(body), 2);
+        std::move(returnType), std::move(body), 2);
     const auto transformId = transform->id();
     auto program = node<Program>(NodeList<Subroutine>{
                                      std::move(main), std::move(transform)},
@@ -123,12 +123,13 @@ TEST_CASE("Code generator lowers subroutine signatures and parameter storage",
 TEST_CASE("Code generator allocates every function-scoped local in the entry block",
     "[codegen]")
 {
-    auto flag = node<Dim>("flag", nullptr, TypeName::Bool, false, 2);
-    auto number = node<Dim>("number", nullptr, TypeName::Real, false, 3);
-    auto label = node<Dim>("label", nullptr, TypeName::Text, false, 4);
-    auto items = node<Dim>("items", node<Number>(2.0, 5), TypeName::Real, true, 5);
+    auto flag = test::scalarDeclaration("flag", ScalarType::Name::Bool, 2);
+    auto number = test::scalarDeclaration("number", ScalarType::Name::Real, 3);
+    auto label = test::scalarDeclaration("label", ScalarType::Name::Text, 4);
+    auto items = test::arrayDeclaration(
+        "items", node<Number>(2.0, 5), ScalarType::Name::Real, 5);
 
-    auto nested = node<Dim>("nested", nullptr, TypeName::Real, false, 7);
+    auto nested = test::scalarDeclaration("nested", ScalarType::Name::Real, 7);
     auto branchBody = node<Sequence>(NodeList<Statement>{std::move(nested)}, 7);
     auto branch = node<IfBranch>(
         node<Boolean>(true, 6), std::move(branchBody), 6);
@@ -143,7 +144,7 @@ TEST_CASE("Code generator allocates every function-scoped local in the entry blo
                                    std::move(conditional), std::move(loop)},
         1);
     auto main = node<Subroutine>("Main", NodeList<Parameter>{},
-        std::nullopt, std::move(body), 1);
+        nullptr, std::move(body), 1);
     auto program = node<Program>(NodeList<Subroutine>{std::move(main)}, 1);
 
     SymbolTable symbols;

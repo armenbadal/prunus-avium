@@ -3,6 +3,7 @@
 #include "formatters.hxx"
 
 #include <format>
+#include <memory>
 
 using namespace avium;
 
@@ -16,12 +17,21 @@ TEST_CASE("Lexeme-ը ձևաչափվում է diagnostic ներկայացմամբ
     CHECK(std::format("{}", Lexeme{Token::Then, "THEN", 1}) == "'THEN'");
 }
 
-TEST_CASE("TypeName-ը ձևաչափվում է std::format-ով", "[formatters]")
+TEST_CASE("ScalarType::Name-ը ձևաչափվում է std::format-ով", "[formatters]")
 {
-    CHECK(std::format("{}", TypeName::Bool) == "BOOL");
-    CHECK(std::format("{}", TypeName::Real) == "REAL");
-    CHECK(std::format("{}", TypeName::Text) == "TEXT");
-    CHECK(std::format("{:>7}", TypeName::Real) == "   REAL");
+    CHECK(std::format("{}", ScalarType::Name::Bool) == "BOOL");
+    CHECK(std::format("{}", ScalarType::Name::Real) == "REAL");
+    CHECK(std::format("{}", ScalarType::Name::Text) == "TEXT");
+    CHECK(std::format("{:>7}", ScalarType::Name::Real) == "   REAL");
+}
+
+TEST_CASE("Type-ը ձևաչափվում է std::format-ով", "[formatters]")
+{
+    ScalarType scalar{ScalarType::Name::Bool, 1};
+    ArrayType array{std::make_unique<ScalarType>(ScalarType::Name::Text, 1), nullptr, 1};
+
+    CHECK(std::format("{}", static_cast<const Type&>(scalar)) == "BOOL");
+    CHECK(std::format("{}", static_cast<const Type&>(array)) == "TEXT[]");
 }
 
 TEST_CASE("Operation-ը ձևաչափվում է std::format-ով", "[formatters]")

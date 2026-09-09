@@ -144,20 +144,30 @@ struct formatter<avium::Lexeme> : formatter<string_view> {
 };
 
 template<>
-struct formatter<avium::TypeName> : formatter<string_view> {
-    format_context::iterator format(avium::TypeName type, format_context& context) const
+struct formatter<avium::ScalarType::Name> : formatter<string_view> {
+    format_context::iterator format(avium::ScalarType::Name type, format_context& context) const
     {
         const auto value = [type] {
             switch( type ) {
-                case avium::TypeName::Bool:
+                case avium::ScalarType::Name::Bool:
                     return string_view{"BOOL"};
-                case avium::TypeName::Real:
+                case avium::ScalarType::Name::Real:
                     return string_view{"REAL"};
-                case avium::TypeName::Text:
+                case avium::ScalarType::Name::Text:
                     return string_view{"TEXT"};
             }
             unreachable();
         }();
+        return formatter<string_view>::format(value, context);
+    }
+};
+
+template<>
+struct formatter<avium::Type> : formatter<string_view> {
+    format_context::iterator format(const avium::Type& type, format_context& context) const
+    {
+        const auto base = std::format("{}", avium::baseType(type)._name);
+        const auto value = avium::isArrayType(type) ? base + "[]" : base;
         return formatter<string_view>::format(value, context);
     }
 };

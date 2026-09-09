@@ -30,7 +30,7 @@ public:
     std::unique_ptr<llvm::Module> generate(const Program& program, std::string_view moduleName);
 
 private:
-    llvm::Type* llvmType(TypeName type) const;
+    llvm::Type* llvmType(const Type& type) const;
     llvm::StructType* arrayType() const;
     SymbolId symbolId(const Node& node) const;
 

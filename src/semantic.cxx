@@ -10,9 +10,30 @@ namespace avium {
 
 namespace {
 
-bool typeMismatch(std::optional<TypeName> actual, TypeName expected)
+const ScalarType& scalarType(ScalarType::Name name)
 {
-    return actual.has_value() && *actual != expected;
+    static const ScalarType boolType{ScalarType::Name::Bool, 0};
+    static const ScalarType realType{ScalarType::Name::Real, 0};
+    static const ScalarType textType{ScalarType::Name::Text, 0};
+    switch( name ) {
+        case ScalarType::Name::Bool:
+            return boolType;
+        case ScalarType::Name::Real:
+            return realType;
+        case ScalarType::Name::Text:
+            return textType;
+    }
+    std::unreachable();
+}
+
+bool typeMismatch(const Type* actual, const Type& expected)
+{
+    return actual != nullptr && !sameType(*actual, expected);
+}
+
+bool hasScalarType(const Type* type, ScalarType::Name name)
+{
+    return type != nullptr && !isArrayType(*type) && baseType(*type)._name == name;
 }
 
 std::optional<double> constantReal(const Expression& expression)
@@ -69,11 +90,13 @@ std::optional<double> constantReal(const Expression& expression)
 
 const std::vector<SubroutineSignature>& builtinSignatures()
 {
+    const auto& real = scalarType(ScalarType::Name::Real);
+    const auto& text = scalarType(ScalarType::Name::Text);
     static const std::vector<SubroutineSignature> signatures{
-        {"Print", {{std::nullopt, false}}, std::nullopt, true},
-        {"Input", {}, TypeName::Text, true},
-        {"NUM", {{TypeName::Text, false}}, TypeName::Real, true},
-        {"SQR", {{TypeName::Real, false}}, TypeName::Real, true},
+        {"Print", {nullptr}, nullptr, true},
+        {"Input", {}, &text, true},
+        {"NUM", {&text}, &real, true},
+        {"SQR", {&real}, &real, true},
     };
     return signatures;
 }
@@ -95,9 +118,9 @@ void SemanticModel::setEntryPoint(SymbolId symbol)
     _entryPoint = symbol;
 }
 
-void SemanticModel::setType(NodeId node, TypeName type)
+void SemanticModel::setType(NodeId node, const Type& type)
 {
-    _types.insert_or_assign(node, type);
+    _types.insert_or_assign(node, &type);
 }
 
 std::optional<SymbolId> SemanticModel::symbol(NodeId node) const
@@ -119,11 +142,11 @@ std::optional<SymbolId> SemanticModel::entryPoint() const
     return _entryPoint;
 }
 
-std::optional<TypeName> SemanticModel::type(NodeId node) const
+const Type* SemanticModel::type(NodeId node) const
 {
     if( const auto entry = _types.find(node); entry != _types.end() )
         return entry->second;
-    return std::nullopt;
+    return nullptr;
 }
 
 SemanticAnalyzer::SemanticAnalyzer(SymbolTable& symbols, SemanticModel& model, Diagnostics& diagnostics)
@@ -159,7 +182,7 @@ void SemanticAnalyzer::visit(Program& program)
         if( !main->_parameters.empty() )
             report(*main, "'Main' ենթածրագիրը պարամետրեր չի կարող ունենալ։");
 
-        if( main->_returnType.has_value() )
+        if( main->_returnType )
             report(*main, "'Main' ենթածրագիրը արժեք չի կարող վերադարձնել։");
     }
 
@@ -180,27 +203,29 @@ void SemanticAnalyzer::visit(Sequence& sequence)
 
 void SemanticAnalyzer::visit(Dim& dim)
 {
-    if( !dim._isArray )
+    if( !isArrayType(*dim._type) )
         return;
 
-    if( !dim._size ) {
+    const auto& array = static_cast<ArrayType&>(*dim._type);
+    if( !array._size ) {
         report(dim, "Զանգվածի չափը նշված չէ։");
         return;
     }
 
-    const auto sizeType = expressionType(*dim._size);
-    const auto scalarSize = requireScalar(*dim._size);
-    const auto wrongSizeType = scalarSize && typeMismatch(sizeType, TypeName::Real);
+    const auto sizeType = expressionType(*array._size);
+    const auto scalarSize = requireScalar(*array._size);
+    const auto& realType = scalarType(ScalarType::Name::Real);
+    const auto wrongSizeType = scalarSize && typeMismatch(sizeType, realType);
     if( wrongSizeType )
-        report(*dim._size, std::format("Զանգվածի չափը պետք է լինի REAL, բայց ստացվել է {}։", *sizeType));
+        report(*array._size, std::format("Զանգվածի չափը պետք է լինի REAL, բայց ստացվել է {}։", *sizeType));
 
-    const auto size = constantReal(*dim._size);
+    const auto size = constantReal(*array._size);
     if( size.has_value() ) {
         const auto positive = *size > 0.0;
         const auto integral = std::trunc(*size) == *size;
         const auto finite = std::isfinite(*size);
         if( !positive || !integral || !finite )
-            report(*dim._size, "Զանգվածի հաստատուն չափը պետք է լինի դրական ամբողջ թիվ։");
+            report(*array._size, "Զանգվածի հաստատուն չափը պետք է լինի դրական ամբողջ թիվ։");
     }
 }
 
@@ -215,13 +240,15 @@ void SemanticAnalyzer::visit(Let& let)
         return;
 
     const auto& symbol = _symbols.symbol(*target);
-    const auto targetType = *symbol.type;
+    const auto& declaredType = *symbol.type;
+    const auto arrayTarget = isArrayType(declaredType);
+    const Type& targetType = let._index && arrayTarget ? baseType(declaredType) : declaredType;
     bool validTarget = true;
-    if( let._index && !symbol.isArray ) {
+    if( let._index && !arrayTarget ) {
         report(*let._variable, std::format("'{}' փոփոխականը զանգված չէ։", let._variable->_name));
         validTarget = false;
     }
-    else if( !let._index && symbol.isArray ) {
+    else if( !let._index && arrayTarget ) {
         report(*let._variable, std::format("'{}' զանգվածին ամբողջությամբ արժեք վերագրել չի կարելի։", let._variable->_name));
         validTarget = false;
     }
@@ -231,7 +258,7 @@ void SemanticAnalyzer::visit(Let& let)
         return;
     }
 
-    const auto wrongValueType = validTarget && valueType.has_value() && *valueType != targetType;
+    const auto wrongValueType = validTarget && typeMismatch(valueType, targetType);
     if( wrongValueType )
         report(*let._value, std::format("'{}' փոփոխականին պետք է վերագրվի {}, բայց ստացվել է {}։", let._variable->_name, targetType, *valueType));
 }
@@ -248,7 +275,8 @@ void SemanticAnalyzer::visit(IfBranch& branch)
 {
     const auto conditionType = expressionType(*branch._condition);
     const auto scalarCondition = requireScalar(*branch._condition);
-    const auto wrongConditionType = scalarCondition && typeMismatch(conditionType, TypeName::Bool);
+    const auto& boolType = scalarType(ScalarType::Name::Bool);
+    const auto wrongConditionType = scalarCondition && typeMismatch(conditionType, boolType);
     if( wrongConditionType )
         report(*branch._condition, std::format("Պայմանական ճյուղի պայմանը պետք է լինի BOOL, բայց ստացվել է {}։", *conditionType));
     visit(*branch._body);
@@ -258,7 +286,8 @@ void SemanticAnalyzer::visit(While& loop)
 {
     const auto conditionType = expressionType(*loop._condition);
     const auto scalarCondition = requireScalar(*loop._condition);
-    const auto wrongConditionType = scalarCondition && typeMismatch(conditionType, TypeName::Bool);
+    const auto& boolType = scalarType(ScalarType::Name::Bool);
+    const auto wrongConditionType = scalarCondition && typeMismatch(conditionType, boolType);
     if( wrongConditionType )
         report(*loop._condition, std::format("WHILE-ի պայմանը պետք է լինի BOOL, բայց ստացվել է {}։", *conditionType));
     visit(*loop._body);
@@ -270,19 +299,20 @@ void SemanticAnalyzer::visit(For& loop)
 
     const auto beginType = expressionType(*loop._begin);
     const auto scalarBegin = requireScalar(*loop._begin);
-    const auto wrongBeginType = scalarBegin && typeMismatch(beginType, TypeName::Real);
+    const auto& realType = scalarType(ScalarType::Name::Real);
+    const auto wrongBeginType = scalarBegin && typeMismatch(beginType, realType);
     if( wrongBeginType )
         report(*loop._begin, std::format("FOR-ի սկզբնական արժեքը պետք է լինի REAL, բայց ստացվել է {}։", *beginType));
 
     const auto endType = expressionType(*loop._end);
     const auto scalarEnd = requireScalar(*loop._end);
-    const auto wrongEndType = scalarEnd && typeMismatch(endType, TypeName::Real);
+    const auto wrongEndType = scalarEnd && typeMismatch(endType, realType);
     if( wrongEndType )
         report(*loop._end, std::format("FOR-ի վերջնական արժեքը պետք է լինի REAL, բայց ստացվել է {}։", *endType));
 
     const auto stepType = expressionType(*loop._step);
     const auto scalarStep = requireScalar(*loop._step);
-    const auto wrongStepType = scalarStep && typeMismatch(stepType, TypeName::Real);
+    const auto wrongStepType = scalarStep && typeMismatch(stepType, realType);
     if( wrongStepType )
         report(*loop._step, std::format("FOR-ի քայլը պետք է լինի REAL, բայց ստացվել է {}։", *stepType));
     if( loop._step->_value == 0.0 )
@@ -301,24 +331,32 @@ void SemanticAnalyzer::visit(Call& call)
         return;
 
     const auto& signature = *_symbols.symbol(*id).subroutine;
-    if( signature.returnType.has_value() )
+    if( signature.returnType )
         report(call, "CALL-ով կարելի է կանչել միայն պրոցեդուրա։");
     validateArguments(call, call._callee, call._arguments, signature);
 }
 
+void SemanticAnalyzer::visit(ScalarType&)
+{
+}
+
+void SemanticAnalyzer::visit(ArrayType&)
+{
+}
+
 void SemanticAnalyzer::visit(Boolean& boolean)
 {
-    _model.setType(boolean.id(), TypeName::Bool);
+    _model.setType(boolean.id(), scalarType(ScalarType::Name::Bool));
 }
 
 void SemanticAnalyzer::visit(Number& number)
 {
-    _model.setType(number.id(), TypeName::Real);
+    _model.setType(number.id(), scalarType(ScalarType::Name::Real));
 }
 
 void SemanticAnalyzer::visit(Text& text)
 {
-    _model.setType(text.id(), TypeName::Text);
+    _model.setType(text.id(), scalarType(ScalarType::Name::Text));
 }
 
 void SemanticAnalyzer::visit(Variable& variable)
@@ -333,18 +371,20 @@ void SemanticAnalyzer::visit(Unary& unary)
 
     switch( unary._operation ) {
         case Operation::Not: {
-            const auto wrongOperandType = scalar && typeMismatch(operandType, TypeName::Bool);
+            const auto& boolType = scalarType(ScalarType::Name::Bool);
+            const auto wrongOperandType = scalar && typeMismatch(operandType, boolType);
             if( wrongOperandType )
                 report(unary, std::format("'{}' գործողության օպերանդը պետք է լինի BOOL, բայց ստացվել է {}։", unary._operation, *operandType));
-            _model.setType(unary.id(), TypeName::Bool);
+            _model.setType(unary.id(), boolType);
             break;
         }
         case Operation::Add:
         case Operation::Sub: {
-            const auto wrongOperandType = scalar && typeMismatch(operandType, TypeName::Real);
+            const auto& realType = scalarType(ScalarType::Name::Real);
+            const auto wrongOperandType = scalar && typeMismatch(operandType, realType);
             if( wrongOperandType )
                 report(unary, std::format("Ունար '{}' գործողության օպերանդը պետք է լինի REAL, բայց ստացվել է {}։", unary._operation, *operandType));
-            _model.setType(unary.id(), TypeName::Real);
+            _model.setType(unary.id(), realType);
             break;
         }
         default:
@@ -357,7 +397,7 @@ void SemanticAnalyzer::visit(Binary& binary)
     const auto leftType = expressionType(*binary._left);
     const auto rightType = expressionType(*binary._right);
 
-    std::optional<TypeName> type;
+    const Type* type = nullptr;
     switch( binary._operation ) {
         case Operation::Add:
         case Operation::Sub:
@@ -366,26 +406,27 @@ void SemanticAnalyzer::visit(Binary& binary)
         case Operation::Quot:
         case Operation::Mod:
         case Operation::Pow:  {
+            const auto& realType = scalarType(ScalarType::Name::Real);
             const auto leftScalar = requireScalar(*binary._left);
             const auto rightScalar = requireScalar(*binary._right);
-            const auto wrongLeftType = leftScalar && typeMismatch(leftType, TypeName::Real);
-            const auto wrongRightType = rightScalar && typeMismatch(rightType, TypeName::Real);
+            const auto wrongLeftType = leftScalar && typeMismatch(leftType, realType);
+            const auto wrongRightType = rightScalar && typeMismatch(rightType, realType);
             if( wrongLeftType )
                 report(*binary._left, std::format("'{}' գործողության ձախ օպերանդը պետք է լինի REAL, բայց ստացվել է {}։", binary._operation, *leftType));
             if( wrongRightType )
                 report(*binary._right, std::format("'{}' գործողության աջ օպերանդը պետք է լինի REAL, բայց ստացվել է {}։", binary._operation, *rightType));
-            type = TypeName::Real;
+            type = &realType;
             break;
         }
         case Operation::Eq:
         case Operation::Ne: {
             const auto leftScalar = requireScalar(*binary._left);
             const auto rightScalar = requireScalar(*binary._right);
-            const auto typesKnown = leftType.has_value() && rightType.has_value();
-            const auto typesMatch = leftType == rightType;
+            const auto typesKnown = leftType != nullptr && rightType != nullptr;
+            const auto typesMatch = typesKnown && sameType(*leftType, *rightType);
             if( leftScalar && rightScalar && typesKnown && !typesMatch )
                 report(binary, std::format("'{}' գործողության օպերանդները պետք է լինեն նույն տիպի։", binary._operation));
-            type = TypeName::Bool;
+            type = &scalarType(ScalarType::Name::Bool);
             break;
         }
         case Operation::Gt:
@@ -394,51 +435,56 @@ void SemanticAnalyzer::visit(Binary& binary)
         case Operation::Le: {
             const auto leftScalar = requireScalar(*binary._left);
             const auto rightScalar = requireScalar(*binary._right);
-            const auto typesKnown = leftType.has_value() && rightType.has_value();
-            const auto bothReal = leftType == TypeName::Real && rightType == TypeName::Real;
-            const auto bothText = leftType == TypeName::Text && rightType == TypeName::Text;
+            const auto typesKnown = leftType != nullptr && rightType != nullptr;
+            const auto bothReal = hasScalarType(leftType, ScalarType::Name::Real) && hasScalarType(rightType, ScalarType::Name::Real);
+            const auto bothText = hasScalarType(leftType, ScalarType::Name::Text) && hasScalarType(rightType, ScalarType::Name::Text);
             const auto comparable = bothReal || bothText;
             if( leftScalar && rightScalar && typesKnown && !comparable )
                 report(binary, std::format("'{}' գործողության օպերանդները պետք է լինեն երկու REAL կամ երկու TEXT արժեք։", binary._operation));
-            type = TypeName::Bool;
+            type = &scalarType(ScalarType::Name::Bool);
             break;
         }
         case Operation::And:
         case Operation::Or:  {
+            const auto& boolType = scalarType(ScalarType::Name::Bool);
             const auto leftScalar = requireScalar(*binary._left);
             const auto rightScalar = requireScalar(*binary._right);
-            const auto wrongLeftType = leftScalar && typeMismatch(leftType, TypeName::Bool);
-            const auto wrongRightType = rightScalar && typeMismatch(rightType, TypeName::Bool);
+            const auto wrongLeftType = leftScalar && typeMismatch(leftType, boolType);
+            const auto wrongRightType = rightScalar && typeMismatch(rightType, boolType);
             if( wrongLeftType )
                 report(*binary._left, std::format("'{}' գործողության ձախ օպերանդը պետք է լինի BOOL, բայց ստացվել է {}։", binary._operation, *leftType));
             if( wrongRightType )
                 report(*binary._right, std::format("'{}' գործողության աջ օպերանդը պետք է լինի BOOL, բայց ստացվել է {}։", binary._operation, *rightType));
-            type = TypeName::Bool;
+            type = &boolType;
             break;
         }
         case Operation::Conc: {
+            const auto& textType = scalarType(ScalarType::Name::Text);
             const auto leftScalar = requireScalar(*binary._left);
             const auto rightScalar = requireScalar(*binary._right);
-            const auto wrongLeftType = leftScalar && typeMismatch(leftType, TypeName::Text);
-            const auto wrongRightType = rightScalar && typeMismatch(rightType, TypeName::Text);
+            const auto wrongLeftType = leftScalar && typeMismatch(leftType, textType);
+            const auto wrongRightType = rightScalar && typeMismatch(rightType, textType);
             if( wrongLeftType )
                 report(*binary._left, std::format("'{}' գործողության ձախ օպերանդը պետք է լինի TEXT, բայց ստացվել է {}։", binary._operation, *leftType));
             if( wrongRightType )
                 report(*binary._right, std::format("'{}' գործողության աջ օպերանդը պետք է լինի TEXT, բայց ստացվել է {}։", binary._operation, *rightType));
-            type = TypeName::Text;
+            type = &textType;
             break;
         }
-        case Operation::Index:
-            if( leftType.has_value() && !isArrayExpression(*binary._left) )
+        case Operation::Index: {
+            const auto array = leftType != nullptr && isArrayType(*leftType);
+            if( leftType != nullptr && !array )
                 report(*binary._left, "Ինդեքսավորվող արտահայտությունը զանգված չէ։");
             validateIndex(*binary._right);
-            type = leftType;
+            if( array )
+                type = &baseType(*leftType);
             break;
+        }
         case Operation::Not:
         case Operation::None:
             std::unreachable();
     }
-    if( type.has_value() )
+    if( type != nullptr )
         _model.setType(binary.id(), *type);
 }
 
@@ -452,7 +498,7 @@ void SemanticAnalyzer::visit(Apply& apply)
         return;
 
     const auto& signature = *_symbols.symbol(*id).subroutine;
-    if( !signature.returnType.has_value() )
+    if( !signature.returnType )
         report(apply, std::format("'{}' ենթածրագիրը արժեք չի վերադարձնում։", apply._callee));
     else
         _model.setType(apply.id(), *signature.returnType);
@@ -468,10 +514,10 @@ void SemanticAnalyzer::declareBuiltins()
 void SemanticAnalyzer::declareSubroutines(const Program& program)
 {
     for( const auto& subroutine : program._subroutines ) {
-        std::vector<ParameterInfo> parameters;
+        std::vector<const Type*> parameters;
         parameters.reserve(subroutine->_parameters.size());
         for( const auto& parameter : subroutine->_parameters )
-            parameters.push_back(parameterInfo(*parameter));
+            parameters.push_back(parameter->_type.get());
 
         const auto existing = _symbols.lookupSubroutine(subroutine->_name);
         if( existing.has_value() ) {
@@ -484,7 +530,7 @@ void SemanticAnalyzer::declareSubroutines(const Program& program)
         }
 
         const auto& name = subroutine->_name;
-        const auto returnType = subroutine->_returnType;
+        const auto returnType = subroutine->_returnType.get();
         const auto builtin = false;
         SubroutineSignature signature{name, std::move(parameters), returnType, builtin};
         const auto id = _symbols.declareSubroutine(std::move(signature));
@@ -506,10 +552,8 @@ void SemanticAnalyzer::declareParameters(const Subroutine& subroutine)
 {
     for( const auto& parameter : subroutine._parameters ) {
         const auto& name = parameter->_name;
-        const auto type = parameter->_type;
-        const auto isArray = parameter->_isArray;
         const auto storage = VariableStorage::Parameter;
-        const auto id = _symbols.declareVariable(name, type, isArray, storage);
+        const auto id = _symbols.declareVariable(name, *parameter->_type, storage);
         if( id == UnknownSymbol )
             report(*parameter, std::format("'{}' անունն արդեն սահմանված է այս ենթածրագրում։", parameter->_name));
         else
@@ -519,13 +563,12 @@ void SemanticAnalyzer::declareParameters(const Subroutine& subroutine)
 
 void SemanticAnalyzer::declareReturnValue(const Subroutine& subroutine)
 {
-    if( !subroutine._returnType.has_value() )
+    if( !subroutine._returnType )
         return;
 
     const auto& name = subroutine._name;
-    const auto type = *subroutine._returnType;
     const auto storage = VariableStorage::ReturnValue;
-    const auto id = _symbols.declareVariable(name, type, false, storage);
+    const auto id = _symbols.declareVariable(name, *subroutine._returnType, storage);
     if( id == UnknownSymbol )
         report(subroutine, std::format("'{}' անունն արդեն սահմանված է այս ենթածրագրում։", subroutine._name));
     else
@@ -565,7 +608,7 @@ void SemanticAnalyzer::declareLocals(const Sequence& sequence)
 void SemanticAnalyzer::declareDim(const Dim& dim)
 {
     const auto storage = VariableStorage::Local;
-    const auto id = _symbols.declareVariable(dim._name, dim._type, dim._isArray, storage);
+    const auto id = _symbols.declareVariable(dim._name, *dim._type, storage);
     if( id == UnknownSymbol )
         report(dim, std::format("'{}' անունն արդեն սահմանված է այս ենթածրագրում։", dim._name));
     else
@@ -579,13 +622,14 @@ void SemanticAnalyzer::declareForVariable(const For& loop)
         const auto id = *_symbols.lookup(name);
         const auto& symbol = _symbols.symbol(id);
         _model.bind(loop._parameter->id(), id);
-        if( symbol.kind != SymbolKind::Variable || symbol.isArray || symbol.type != TypeName::Real )
+        const auto validType = symbol.type != nullptr && hasScalarType(symbol.type, ScalarType::Name::Real);
+        if( symbol.kind != SymbolKind::Variable || !validType )
             report(loop, std::format("FOR-ի '{}' հաշվիչը պետք է լինի պարզ REAL փոփոխական։", name));
         return;
     }
 
     const auto storage = VariableStorage::ForVariable;
-    const auto id = _symbols.declareVariable(name, TypeName::Real, false, storage);
+    const auto id = _symbols.declareVariable(name, scalarType(ScalarType::Name::Real), storage);
     _model.bind(loop._parameter->id(), id);
 }
 
@@ -634,13 +678,18 @@ void SemanticAnalyzer::validateArguments(const Node& node, std::string_view name
     for( std::size_t index = 0; index < commonCount; ++index ) {
         const auto& argument = arguments[index];
         const auto argumentType = expressionType(*argument);
-        const auto& parameter = signature.parameters[index];
+        const auto parameterType = signature.parameters[index];
 
-        if( !argumentType.has_value() )
+        if( argumentType == nullptr )
             continue;
 
-        if( parameter.isArray ) {
-            if( !isArrayExpression(*argument) ) {
+        if( parameterType == nullptr ) {
+            requireScalar(*argument);
+            continue;
+        }
+
+        if( isArrayType(*parameterType) ) {
+            if( !isArrayType(*argumentType) ) {
                 report(*argument, "Սպասվում է զանգվածային արգումենտ։");
                 continue;
             }
@@ -649,17 +698,14 @@ void SemanticAnalyzer::validateArguments(const Node& node, std::string_view name
             continue;
         }
 
-        if( !parameter.type.has_value() )
-            continue;
-
-        const auto expectedType = *parameter.type;
+        const auto& expectedType = *parameterType;
         const auto wrongArgumentType = typeMismatch(argumentType, expectedType);
         if( wrongArgumentType )
             report(*argument, std::format("'{}' ենթածրագրի թիվ {} արգումենտը պետք է լինի {}, բայց ստացվել է {}։", name, index + 1, expectedType, *argumentType));
     }
 }
 
-std::optional<TypeName> SemanticAnalyzer::expressionType(Expression& expression)
+const Type* SemanticAnalyzer::expressionType(Expression& expression)
 {
     if( const auto type = _model.type(expression.id()) )
         return type;
@@ -669,10 +715,8 @@ std::optional<TypeName> SemanticAnalyzer::expressionType(Expression& expression)
 
 bool SemanticAnalyzer::isArrayExpression(const Expression& expression) const
 {
-    if( expression.kind != NodeKind::Variable )
-        return false;
-    const auto id = _model.symbol(expression.id());
-    return id.has_value() && _symbols.symbol(*id).isArray;
+    const auto type = _model.type(expression.id());
+    return type != nullptr && isArrayType(*type);
 }
 
 bool SemanticAnalyzer::requireScalar(const Expression& expression)
@@ -687,14 +731,10 @@ void SemanticAnalyzer::validateIndex(Expression& index)
 {
     const auto indexType = expressionType(index);
     const auto scalarIndex = requireScalar(index);
-    const auto wrongIndexType = scalarIndex && typeMismatch(indexType, TypeName::Real);
+    const auto& realType = scalarType(ScalarType::Name::Real);
+    const auto wrongIndexType = scalarIndex && typeMismatch(indexType, realType);
     if( wrongIndexType )
         report(index, std::format("Զանգվածի ինդեքսը պետք է լինի REAL, բայց ստացվել է {}։", *indexType));
-}
-
-ParameterInfo SemanticAnalyzer::parameterInfo(const Dim& parameter) const
-{
-    return {parameter._type, parameter._isArray};
 }
 
 void SemanticAnalyzer::report(const Node& node, std::string_view message)

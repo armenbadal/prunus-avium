@@ -4,7 +4,6 @@
 #include "astvisitor.hxx"
 #include "test_ast.hxx"
 
-#include <optional>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -28,6 +27,8 @@ public:
     NodeKind visit(While&) { return NodeKind::While; }
     NodeKind visit(For&) { return NodeKind::For; }
     NodeKind visit(Call&) { return NodeKind::Call; }
+    NodeKind visit(ScalarType&) { return NodeKind::ScalarType; }
+    NodeKind visit(ArrayType&) { return NodeKind::ArrayType; }
     NodeKind visit(Apply&) { return NodeKind::Apply; }
     NodeKind visit(Binary&) { return NodeKind::Binary; }
     NodeKind visit(Unary&) { return NodeKind::Unary; }
@@ -82,6 +83,25 @@ TEST_CASE("AST-ի պարզ արտահայտությունները պահում �
     CHECK(variable->_name == "fruit_count");
 }
 
+TEST_CASE("AST-ը ներկայացնում է պարզ և զանգվածային տիպերը", "[ast]")
+{
+    const auto scalar = node<ScalarType>(ScalarType::Name::Text, 6);
+    CHECK(scalar->kind == NodeKind::ScalarType);
+    CHECK(scalar->_name == ScalarType::Name::Text);
+
+    const auto openArray = node<ArrayType>(
+        node<ScalarType>(ScalarType::Name::Real, 7), nullptr, 7);
+    CHECK(openArray->kind == NodeKind::ArrayType);
+    CHECK(openArray->isOpen());
+    CHECK(openArray->_base->_name == ScalarType::Name::Real);
+
+    const auto closedArray = node<ArrayType>(
+        node<ScalarType>(ScalarType::Name::Bool, 8), node<Number>(4.0, 8), 8);
+    CHECK_FALSE(closedArray->isOpen());
+    CHECK(closedArray->_base->_name == ScalarType::Name::Bool);
+    CHECK(closedArray->_size->kind == NodeKind::Number);
+}
+
 TEST_CASE("AST-ը ներկայացնում է կազմական արտահայտությունները", "[ast]")
 {
     auto operand = node<Number>(2.0, 7);
@@ -117,26 +137,34 @@ TEST_CASE("DIM-ն ու Parameter alias-ը ներկայացնում են հայտ
 {
     static_assert(std::is_same_v<Parameter, Dim>);
 
-    const auto scalar = node<Dim>("total", nullptr, TypeName::Real, false, 11);
+    const auto scalar = node<Dim>(
+        "total", node<ScalarType>(ScalarType::Name::Real, 11), 11);
     auto size = node<Number>(12.0, 12);
     const auto* sizeNode = size.get();
-    const auto array = node<Dim>("items", std::move(size), TypeName::Text, true, 12);
-    const auto parameter = node<Parameter>("values", nullptr, TypeName::Bool, true, 13);
+    auto arrayType = node<ArrayType>(
+        node<ScalarType>(ScalarType::Name::Text, 12), std::move(size), 12);
+    const auto* arrayTypeNode = arrayType.get();
+    const auto array = node<Dim>("items", std::move(arrayType), 12);
+    auto parameterType = node<ArrayType>(
+        node<ScalarType>(ScalarType::Name::Bool, 13), nullptr, 13);
+    const auto parameter = node<Parameter>("values", std::move(parameterType), 13);
 
     CHECK(scalar->_name == "total");
-    CHECK_FALSE(scalar->_size);
-    CHECK(scalar->_type == TypeName::Real);
-    CHECK_FALSE(scalar->_isArray);
+    REQUIRE(scalar->_type->kind == NodeKind::ScalarType);
+    CHECK(static_cast<const ScalarType&>(*scalar->_type)._name == ScalarType::Name::Real);
 
     CHECK(array->_name == "items");
-    CHECK(array->_size.get() == sizeNode);
-    CHECK(array->_type == TypeName::Text);
-    CHECK(array->_isArray);
+    CHECK(array->_type.get() == arrayTypeNode);
+    REQUIRE(array->_type->kind == NodeKind::ArrayType);
+    const auto& closedArray = static_cast<const ArrayType&>(*array->_type);
+    CHECK(closedArray._size.get() == sizeNode);
+    CHECK(closedArray._base->_name == ScalarType::Name::Text);
 
     CHECK(parameter->kind == NodeKind::Dim);
-    CHECK_FALSE(parameter->_size);
-    CHECK(parameter->_type == TypeName::Bool);
-    CHECK(parameter->_isArray);
+    REQUIRE(parameter->_type->kind == NodeKind::ArrayType);
+    const auto& openArray = static_cast<const ArrayType&>(*parameter->_type);
+    CHECK(openArray.isOpen());
+    CHECK(openArray._base->_name == ScalarType::Name::Bool);
 }
 
 TEST_CASE("LET-ը պահում է պարզ և ինդեքսավորված վերագրումները", "[ast]")
@@ -214,12 +242,14 @@ TEST_CASE("CALL, ենթածրագիրը և ծրագիրը պահպանում ե�
     auto body = node<Sequence>(NodeList<Statement>{std::move(call)}, 30);
     const auto* bodyNode = body.get();
     auto procedure = node<Subroutine>(
-        "Main", NodeList<Parameter>{}, std::nullopt, std::move(body), 28);
+        "Main", NodeList<Parameter>{}, nullptr, std::move(body), 28);
     const auto* procedureNode = procedure.get();
-    auto parameter = node<Parameter>("items", nullptr, TypeName::Text, true, 29);
+    auto parameter = test::arrayDeclaration<Parameter>(
+        "items", nullptr, ScalarType::Name::Text, 29);
     const auto* parameterNode = parameter.get();
+    auto returnType = node<ScalarType>(ScalarType::Name::Real, 29);
     auto function = node<Subroutine>("Count", NodeList<Parameter>{std::move(parameter)},
-        TypeName::Real, emptySequence(31), 29);
+        std::move(returnType), emptySequence(31), 29);
     const auto* functionNode = function.get();
     const auto program = node<Program>(
         NodeList<Subroutine>{std::move(procedure), std::move(function)}, 28);
@@ -230,9 +260,9 @@ TEST_CASE("CALL, ենթածրագիրը և ծրագիրը պահպանում ե�
     REQUIRE(bodyNode->_items.size() == 1);
     CHECK(bodyNode->_items.front().get() == callNode);
 
-    CHECK_FALSE(procedureNode->_returnType.has_value());
-    REQUIRE(functionNode->_returnType.has_value());
-    CHECK(*functionNode->_returnType == TypeName::Real);
+    CHECK_FALSE(procedureNode->_returnType);
+    REQUIRE(functionNode->_returnType);
+    CHECK(functionNode->_returnType->_name == ScalarType::Name::Real);
     REQUIRE(functionNode->_parameters.size() == 1);
     CHECK(functionNode->_parameters.front().get() == parameterNode);
     REQUIRE(program->_subroutines.size() == 2);
@@ -251,9 +281,14 @@ TEST_CASE("ASTVisitor-ը NodeKind-ով ուղարկում է ճիշտ overload-�
     auto sequence = node<Sequence>(NodeList<Statement>{std::move(let)}, 40);
     auto* sequenceNode = sequence.get();
     auto subroutine = node<Subroutine>(
-        "Main", NodeList<Parameter>{}, std::nullopt, std::move(sequence), 40);
+        "Main", NodeList<Parameter>{}, nullptr, std::move(sequence), 40);
     auto* subroutineNode = subroutine.get();
     const auto program = node<Program>(NodeList<Subroutine>{std::move(subroutine)}, 40);
+    auto scalar = node<ScalarType>(ScalarType::Name::Real, 40);
+    Node& scalarNode = *scalar;
+    auto array = node<ArrayType>(
+        node<ScalarType>(ScalarType::Name::Text, 40), nullptr, 40);
+    Node& arrayNode = *array;
     Node empty;
     NodeKindVisitor visitor;
 
@@ -263,5 +298,7 @@ TEST_CASE("ASTVisitor-ը NodeKind-ով ուղարկում է ճիշտ overload-�
     CHECK(visitor.visit(*sequenceNode) == NodeKind::Sequence);
     CHECK(visitor.visit(*subroutineNode) == NodeKind::Subroutine);
     CHECK(visitor.visit(*program) == NodeKind::Program);
+    CHECK(visitor.visit(scalarNode) == NodeKind::ScalarType);
+    CHECK(visitor.visit(arrayNode) == NodeKind::ArrayType);
     CHECK(visitor.visit(empty) == NodeKind::Empty);
 }

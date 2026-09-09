@@ -8,14 +8,14 @@ TEST_CASE("SymbolTable declares and resolves variables", "[symbols]")
 {
     SymbolTable symbols;
     symbols.openScope();
+    ScalarType realType{ScalarType::Name::Real, 1};
 
-    const auto id = symbols.declareVariable("value", TypeName::Real);
+    const auto id = symbols.declareVariable("value", realType);
 
     REQUIRE(id != UnknownSymbol);
     CHECK(symbols.lookup("value") == id);
     CHECK(symbols.declaredInCurrentScope("value"));
-    REQUIRE(symbols.symbol(id).type.has_value());
-    CHECK(symbols.symbol(id).type == TypeName::Real);
+    CHECK(symbols.symbol(id).type == &realType);
     CHECK(symbols.symbol(id).kind == SymbolKind::Variable);
 }
 
@@ -23,9 +23,11 @@ TEST_CASE("SymbolTable rejects duplicate declarations in one scope", "[symbols]"
 {
     SymbolTable symbols;
     symbols.openScope();
+    ScalarType realType{ScalarType::Name::Real, 1};
+    ScalarType textType{ScalarType::Name::Text, 1};
 
-    CHECK(symbols.declareVariable("value", TypeName::Real) != UnknownSymbol);
-    CHECK(symbols.declareVariable("value", TypeName::Text) == UnknownSymbol);
+    CHECK(symbols.declareVariable("value", realType) != UnknownSymbol);
+    CHECK(symbols.declareVariable("value", textType) == UnknownSymbol);
     CHECK(symbols.size() == 1);
 }
 
@@ -33,9 +35,11 @@ TEST_CASE("SymbolTable resolves the innermost declaration", "[symbols]")
 {
     SymbolTable symbols;
     symbols.openScope();
-    const auto outer = symbols.declareVariable("value", TypeName::Real);
+    ScalarType realType{ScalarType::Name::Real, 1};
+    ScalarType textType{ScalarType::Name::Text, 1};
+    const auto outer = symbols.declareVariable("value", realType);
     symbols.openScope();
-    const auto inner = symbols.declareVariable("value", TypeName::Text);
+    const auto inner = symbols.declareVariable("value", textType);
 
     CHECK(symbols.lookup("value") == inner);
     REQUIRE(symbols.closeScope());
@@ -47,23 +51,24 @@ TEST_CASE("SymbolTable resolves the innermost declaration", "[symbols]")
 TEST_CASE("Subroutine lookup ignores a same-named local variable", "[symbols]")
 {
     SymbolTable symbols;
-    const auto subroutine = symbols.declareSubroutine({"Value", {}, TypeName::Real, false});
+    ScalarType realType{ScalarType::Name::Real, 1};
+    const auto subroutine = symbols.declareSubroutine({"Value", {}, &realType, false});
     symbols.openScope();
-    const auto variable = symbols.declareVariable("Value", TypeName::Real,
-        false, VariableStorage::ReturnValue);
+    const auto variable = symbols.declareVariable(
+        "Value", realType, VariableStorage::ReturnValue);
 
     CHECK(symbols.lookup("Value") == variable);
     CHECK(symbols.lookupSubroutine("Value") == subroutine);
     REQUIRE(symbols.symbol(subroutine).subroutine.has_value());
-    CHECK(symbols.symbol(subroutine).type == TypeName::Real);
-    CHECK(symbols.symbol(subroutine).subroutine->returnType == TypeName::Real);
+    CHECK(symbols.symbol(subroutine).type == &realType);
+    CHECK(symbols.symbol(subroutine).subroutine->returnType == &realType);
 }
 
 TEST_CASE("Procedure symbols have no value type", "[symbols]")
 {
     SymbolTable symbols;
-    const auto id = symbols.declareSubroutine({"Work", {}, std::nullopt, false});
+    const auto id = symbols.declareSubroutine({"Work", {}, nullptr, false});
 
     REQUIRE(id != UnknownSymbol);
-    CHECK_FALSE(symbols.symbol(id).type.has_value());
+    CHECK(symbols.symbol(id).type == nullptr);
 }

@@ -28,15 +28,10 @@ enum class VariableStorage : std::uint8_t {
     Builtin,
 };
 
-struct ParameterInfo {
-    std::optional<TypeName> type;
-    bool isArray{false};
-};
-
 struct SubroutineSignature {
     std::string name;
-    std::vector<ParameterInfo> parameters;
-    std::optional<TypeName> returnType;
+    std::vector<const Type*> parameters;
+    const ScalarType* returnType{};
     bool builtin{false};
 };
 
@@ -44,8 +39,7 @@ struct Symbol {
     SymbolId id{UnknownSymbol};
     SymbolKind kind{SymbolKind::Variable};
     std::string name;
-    std::optional<TypeName> type;
-    bool isArray{false};
+    const Type* type{};
     VariableStorage storage{VariableStorage::Local};
     std::optional<SubroutineSignature> subroutine;
 };
@@ -64,7 +58,7 @@ public:
     void openScope();
     bool closeScope();
 
-    SymbolId declareVariable(std::string name, TypeName type, bool isArray = false,
+    SymbolId declareVariable(std::string name, const Type& type,
         VariableStorage storage = VariableStorage::Local);
     SymbolId declareSubroutine(SubroutineSignature signature);
 
