@@ -52,6 +52,8 @@ struct formatter<avium::Token> : formatter<string_view> {
                     return string_view{"STEP"};
                 case avium::Token::Call:
                     return string_view{"CALL"};
+                case avium::Token::Return:
+                    return string_view{"RETURN"};
                 case avium::Token::End:
                     return string_view{"END"};
                 case avium::Token::Real:

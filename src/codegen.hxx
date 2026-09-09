@@ -37,7 +37,6 @@ private:
     void declareSubroutines(const Program& program);
     void defineSubroutine(const Subroutine& subroutine);
     void allocateParameters(const Subroutine& subroutine, llvm::Function& function);
-    void allocateReturnValue(const Subroutine& subroutine);
     void allocateLocals(const Sequence& sequence);
     void allocateVariable(SymbolId id);
     void createEntryPoint();

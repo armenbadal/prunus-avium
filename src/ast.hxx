@@ -207,7 +207,7 @@ public:
     using Ptr = std::unique_ptr<Type>;
 
 protected:
-    Type(NodeKind kind, Position line)
+    Type(NodeKind kind, Position line) 
         : Node{kind, line}
     {
     }
@@ -233,7 +233,7 @@ public:
 
 class ArrayType final : public Type {
 public:
-    ArrayType(ScalarType::Ptr base, Expression::Ptr size, Position line)
+    ArrayType(ScalarType::Ptr base, Expression::Ptr size, Position line) 
         : Type{NodeKind::ArrayType, line}, _base{std::move(base)}, _size{std::move(size)}
     {
     }
@@ -263,13 +263,12 @@ inline const ScalarType& baseType(const Type& type) noexcept
 
 inline bool sameType(const Type& left, const Type& right) noexcept
 {
-    return isArrayType(left) == isArrayType(right)
-        && baseType(left)._name == baseType(right)._name;
+    return isArrayType(left) == isArrayType(right) && baseType(left)._name == baseType(right)._name;
 }
 
 class Dim final : public Statement {
 public:
-    Dim(std::string_view name, Type::Ptr type, Position line)
+    Dim(std::string_view name, Type::Ptr type, Position line) 
         : Statement{NodeKind::Dim, line}, _name{name}, _type{std::move(type)}
     {
     }
@@ -373,9 +372,8 @@ public:
 
 class Subroutine final : public Node {
 public:
-    Subroutine(std::string_view name, std::vector<Parameter::Ptr> parameters,
-        ScalarType::Ptr returnType, Sequence::Ptr body, Position line)
-        : Node{NodeKind::Subroutine, line}, _name{name}, _parameters{std::move(parameters)}, _returnType{std::move(returnType)}, _body{std::move(body)}
+    Subroutine(std::string_view name, std::vector<Parameter::Ptr> parameters, ScalarType::Ptr returnType, Sequence::Ptr body, Position line) 
+            : Node{NodeKind::Subroutine, line}, _name{name}, _parameters{std::move(parameters)}, _returnType{std::move(returnType)}, _body{std::move(body)}
     {
     }
 

@@ -54,8 +54,7 @@ TEST_CASE("Subroutine lookup ignores a same-named local variable", "[symbols]")
     ScalarType realType{ScalarType::Name::Real, 1};
     const auto subroutine = symbols.declareSubroutine({"Value", {}, &realType, false});
     symbols.openScope();
-    const auto variable = symbols.declareVariable(
-        "Value", realType, VariableStorage::ReturnValue);
+    const auto variable = symbols.declareVariable("Value", realType);
 
     CHECK(symbols.lookup("Value") == variable);
     CHECK(symbols.lookupSubroutine("Value") == subroutine);

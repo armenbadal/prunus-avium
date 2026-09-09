@@ -115,14 +115,10 @@ void CodeGenerator::defineSubroutine(const Subroutine& subroutine)
     _builder.SetInsertPoint(entry);
 
     allocateParameters(subroutine, *function);
-    allocateReturnValue(subroutine);
     allocateLocals(*subroutine._body);
 
     if( subroutine._returnType ) {
-        const auto returnId = *_model.returnValue(subroutine.id());
-        const auto& symbol = _symbols.symbol(returnId);
-        auto* value = _builder.CreateLoad(llvmType(*symbol.type), _storage.at(returnId));
-        _builder.CreateRet(value);
+        _builder.CreateRet(llvm::Constant::getNullValue(llvmType(*subroutine._returnType)));
     }
     else {
         _builder.CreateRetVoid();
@@ -147,14 +143,6 @@ void CodeGenerator::allocateParameters(const Subroutine& subroutine, llvm::Funct
         }
         ++argument;
     }
-}
-
-void CodeGenerator::allocateReturnValue(const Subroutine& subroutine)
-{
-    const auto id = _model.returnValue(subroutine.id());
-    if( !id.has_value() )
-        return;
-    allocateVariable(*id);
 }
 
 void CodeGenerator::allocateLocals(const Sequence& sequence)

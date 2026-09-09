@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 4.2)
 
-project(prunus VERSION 0.0.1 LANGUAGES CXX)
+project(prunus VERSION 0.0.1 LANGUAGES C CXX)
 
 find_package(LLVM REQUIRED CONFIG)
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})

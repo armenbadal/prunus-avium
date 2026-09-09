@@ -78,11 +78,12 @@ TEST_CASE("Code generator lowers subroutine signatures and parameter storage",
         test::scalarDeclaration<Parameter>("label", ScalarType::Name::Text, 2),
         test::arrayDeclaration<Parameter>("items", nullptr, ScalarType::Name::Real, 2),
     };
-    auto body = node<Sequence>(NodeList<Statement>{}, 2);
+    auto body = node<Sequence>(NodeList<Statement>{
+                                   node<Return>(node<Text>("", 2), 2)},
+        2);
     auto returnType = node<ScalarType>(ScalarType::Name::Text, 2);
     auto transform = node<Subroutine>("Transform", std::move(parameters),
         std::move(returnType), std::move(body), 2);
-    const auto transformId = transform->id();
     auto program = node<Program>(NodeList<Subroutine>{
                                      std::move(main), std::move(transform)},
         1);
@@ -92,8 +93,6 @@ TEST_CASE("Code generator lowers subroutine signatures and parameter storage",
     Diagnostics diagnostics;
     SemanticAnalyzer analyzer{symbols, model, diagnostics};
     REQUIRE(analyzer.analyze(*program));
-    REQUIRE(model.returnValue(transformId).has_value());
-
     llvm::LLVMContext context;
     CodeGenerator generator{context, symbols, model};
     const auto module = generator.generate(*program, "signatures");
@@ -115,8 +114,8 @@ TEST_CASE("Code generator lowers subroutine signatures and parameter storage",
         allocations += llvm::isa<llvm::AllocaInst>(instruction);
         stores += llvm::isa<llvm::StoreInst>(instruction);
     }
-    CHECK(allocations == 4);
-    CHECK(stores == 4);
+    CHECK(allocations == 3);
+    CHECK(stores == 3);
     CHECK_FALSE(llvm::verifyModule(*module));
 }
 
