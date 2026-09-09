@@ -15,39 +15,45 @@ namespace avium {
 using SymbolId = std::uint32_t;
 inline constexpr SymbolId UnknownSymbol = 0;
 
+// Հանդիպում են երկու անուններ. փոփոխական, որը կարող է նաև 
+// զանգված նշանակել, և ենթածրագիր
 enum class SymbolKind : std::uint8_t {
     Variable,
     Subroutine,
 };
 
+// Փոփոխականի դերերը
 enum class VariableStorage : std::uint8_t {
-    Local,
-    Parameter,
-    ForVariable,
-    ReturnValue,
-    Builtin,
+    Local,        // լոկալ, DIM-ով բացահայտ սահմանված
+    Parameter,    // ենթածրագիր պարամետր
+    ForVariable,  // լոկալ, բայց FOR-ով անբացահայտ սահմանված
+    ReturnValue,  // ենթածրագիր-ֆունկցիայի վերադարձվող արժեք
+    Builtin,      // լեզվում ներդրված, նախասահմանված անուն
 };
 
+// Ենթածրագրի պարամետրի հատկությունները
 struct ParameterInfo {
-    std::optional<TypeName> type;
-    bool isArray{false};
+    TypeName type;       // տիպը
+    bool isArray{false}; // զանգված է, թե ոչ
 };
 
+// Ենթածրագրի նկարագրությունը
 struct SubroutineSignature {
-    std::string name;
-    std::vector<ParameterInfo> parameters;
-    std::optional<TypeName> returnType;
-    bool builtin{false};
+    std::string name;                       // անուն
+    std::vector<ParameterInfo> parameters;  // պարամետրեր
+    std::optional<TypeName> returnType;     // վերադարձվող տիպը
+    bool builtin{false};                    // ներդրված է, թե ոչ
 };
 
+// Ծրագրում հանդիպող անունի նկարագրիչը որպես ինքնուրույն սիմվոլ
 struct Symbol {
-    SymbolId id{UnknownSymbol};
-    SymbolKind kind{SymbolKind::Variable};
-    std::string name;
-    TypeName type{TypeName::Unknown};
-    bool isArray{false};
-    VariableStorage storage{VariableStorage::Local};
-    std::optional<SubroutineSignature> subroutine;
+    SymbolId id{UnknownSymbol};                      // եզակի իդենտիֆիկատոր
+    SymbolKind kind{SymbolKind::Variable};           // փոփոխական, թե՞ ենթածրագիր
+    std::string name;                                // անունը
+    TypeName type{TypeName::Unknown};                // տիպը
+    bool isArray{false};                             // սկալյա՞ր, թե՞ զանգված
+    VariableStorage storage{VariableStorage::Local}; // դերը 
+    std::optional<SubroutineSignature> subroutine;   // եթե ենթածրագիր է, ապա դրա նկարագրությունը
 };
 
 class SymbolTable {
@@ -64,8 +70,7 @@ public:
     void openScope();
     bool closeScope();
 
-    SymbolId declareVariable(std::string name, TypeName type, bool isArray = false,
-        VariableStorage storage = VariableStorage::Local);
+    SymbolId declareVariable(std::string name, TypeName type, bool isArray = false, VariableStorage storage = VariableStorage::Local);
     SymbolId declareSubroutine(SubroutineSignature signature);
 
     std::optional<SymbolId> lookup(std::string_view name) const;

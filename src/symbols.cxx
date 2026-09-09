@@ -40,8 +40,7 @@ SymbolId SymbolTable::insert(Symbol symbol, Scope& scope)
     return id;
 }
 
-SymbolId SymbolTable::declareVariable(std::string name, TypeName type, bool isArray,
-    VariableStorage storage)
+SymbolId SymbolTable::declareVariable(std::string name, TypeName type, bool isArray, VariableStorage storage)
 {
     Symbol symbol{
         .kind = SymbolKind::Variable,
