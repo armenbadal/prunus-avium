@@ -137,7 +137,10 @@ const Type* SemanticModel::type(NodeId node) const
     return nullptr;
 }
 
-SemanticAnalyzer::SemanticAnalyzer(SymbolTable& symbols, SemanticModel& model, Diagnostics& diagnostics) : _symbols{symbols}, _model{model}, _diagnostics{diagnostics}
+SemanticAnalyzer::SemanticAnalyzer(SymbolTable& symbols, SemanticModel& model, Diagnostics& diagnostics)
+    : _symbols{symbols}
+    , _model{model}
+    , _diagnostics{diagnostics}
 {
 }
 

@@ -35,7 +35,10 @@ std::string mangledName(std::string_view name)
 } // namespace
 
 CodeGenerator::CodeGenerator(llvm::LLVMContext& context, const SymbolTable& symbols, const SemanticModel& model)
-    : _context{context}, _symbols{symbols}, _model{model}, _builder{context}
+    : _context{context}
+    , _symbols{symbols}
+    , _model{model}
+    , _builder{context}
 {
 }
 

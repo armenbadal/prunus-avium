@@ -85,7 +85,9 @@ ScalarType::Name typeName(Token token)
 
 } // namespace
 
-Parser::Parser(Scanner& scanner, Diagnostics& diagnostics) : _scanner{scanner}, _diagnostics{diagnostics}
+Parser::Parser(Scanner& scanner, Diagnostics& diagnostics)
+    : _scanner{scanner}
+    , _diagnostics{diagnostics}
 {
 }
 
