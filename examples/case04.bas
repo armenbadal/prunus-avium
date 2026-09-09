@@ -14,4 +14,5 @@ SUB f(x AS REAL, y AS REAL) AS REAL
   LET a = x
   DIM b AS REAL
   LET b = y
+  RETURN a + b
 END SUB

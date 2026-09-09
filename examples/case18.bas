@@ -7,7 +7,7 @@ SUB Gcd(x AS REAL, y AS REAL) AS REAL
             LET y = y - x
         END IF
     END WHILE
-    LET Gcd = x + y
+    RETURN x + y
 END SUB
 
 SUB Main

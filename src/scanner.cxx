@@ -27,6 +27,7 @@ const std::map<std::string_view, Token> keywords{
     {"TO", Token::To},
     {"STEP", Token::Step},
     {"CALL", Token::Call},
+    {"RETURN", Token::Return},
     {"END", Token::End},
     {"MOD", Token::Mod},
     {"AND", Token::And},
@@ -106,8 +107,7 @@ Token singleCharacterToken(char value)
 
 } // namespace
 
-Scanner::Scanner(std::istream& source)
-    : _source{source}
+Scanner::Scanner(std::istream& source) : _source{source}
 {
     _source.unsetf(std::ios_base::skipws);
 }

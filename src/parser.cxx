@@ -10,14 +10,14 @@ namespace avium {
 namespace {
 
 const std::set<Token> firstStatement{Token::Let, Token::Dim, Token::If,
-    Token::While, Token::For, Token::Call};
+    Token::While, Token::For, Token::Call, Token::Return};
 const std::set<Token> firstExpression{Token::BoolLit, Token::RealLit,
     Token::TextLit, Token::Identifier, Token::Add, Token::Sub, Token::Not,
     Token::LeftPar};
 const std::set<Token> sequenceEnd{Token::End, Token::ElseIf, Token::Else,
     Token::Subroutine, Token::Eof};
 const std::set<Token> statementSync{Token::NewLine, Token::Let, Token::Dim,
-    Token::If, Token::While, Token::For, Token::Call, Token::End,
+    Token::If, Token::While, Token::For, Token::Call, Token::Return, Token::End,
     Token::ElseIf, Token::Else, Token::Subroutine, Token::Eof};
 const std::set<Token> subroutineSync{Token::Subroutine, Token::Eof};
 const std::set<Token> expressionSync{Token::BoolLit, Token::RealLit,
@@ -70,8 +70,7 @@ Operation operation(Token token)
 
 } // namespace
 
-Parser::Parser(Scanner& scanner, Diagnostics& diagnostics)
-    : _scanner{scanner}, _diagnostics{diagnostics}
+Parser::Parser(Scanner& scanner, Diagnostics& diagnostics) : _scanner{scanner}, _diagnostics{diagnostics}
 {
 }
 
@@ -233,6 +232,8 @@ Statement::Ptr Parser::parseStatement()
         return parseFor();
     if( _lookahead.is(Token::Call) )
         return parseCall();
+    if( _lookahead.is(Token::Return) )
+        return parseReturn();
     return {};
 }
 
@@ -363,6 +364,13 @@ Call::Ptr Parser::parseCall()
     match(Token::Call);
     const auto name = match(Token::Identifier);
     return node<Call>(name, parseExpressionList(), line);
+}
+
+Return::Ptr Parser::parseReturn()
+{
+    const auto line = _lookahead.line;
+    match(Token::Return);
+    return node<Return>(parseExpression(), line);
 }
 
 std::vector<Expression::Ptr> Parser::parseExpressionList()

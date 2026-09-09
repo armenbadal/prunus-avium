@@ -26,6 +26,7 @@ std::string toString(Token token)
         {Token::To, "TO"},
         {Token::Step, "STEP"},
         {Token::Call, "CALL"},
+        {Token::Return, "RETURN"},
         {Token::End, "END"},
         {Token::Real, "REAL"},
         {Token::Text, "TEXT"},

@@ -28,6 +28,7 @@ public:
     NodeKind visit(While&) { return NodeKind::While; }
     NodeKind visit(For&) { return NodeKind::For; }
     NodeKind visit(Call&) { return NodeKind::Call; }
+    NodeKind visit(Return&) { return NodeKind::Return; }
     NodeKind visit(Apply&) { return NodeKind::Apply; }
     NodeKind visit(Binary&) { return NodeKind::Binary; }
     NodeKind visit(Unary&) { return NodeKind::Unary; }
@@ -205,13 +206,18 @@ TEST_CASE("AST-ը պահում է ղեկավարող կառուցվածքներ�
     CHECK(forStatement->_body.get() == forBodyNode);
 }
 
-TEST_CASE("CALL, ենթածրագիրը և ծրագիրը պահպանում են իրենց կառուցվածքը", "[ast]")
+TEST_CASE("CALL, RETURN, ենթածրագիրը և ծրագիրը պահպանում են իրենց կառուցվածքը", "[ast]")
 {
     auto argument = node<Text>("Բարև", 30);
     const auto* argumentNode = argument.get();
     auto call = node<Call>("Print", NodeList<Expression>{std::move(argument)}, 30);
     const auto* callNode = call.get();
-    auto body = node<Sequence>(NodeList<Statement>{std::move(call)}, 30);
+    auto returnValue = node<Number>(1.0, 31);
+    const auto* returnValueNode = returnValue.get();
+    auto returnStatement = node<Return>(std::move(returnValue), 31);
+    const auto* returnNode = returnStatement.get();
+    auto body = node<Sequence>(
+        NodeList<Statement>{std::move(call), std::move(returnStatement)}, 30);
     const auto* bodyNode = body.get();
     auto procedure = node<Subroutine>(
         "Main", NodeList<Parameter>{}, std::nullopt, std::move(body), 28);
@@ -227,8 +233,10 @@ TEST_CASE("CALL, ենթածրագիրը և ծրագիրը պահպանում ե�
     CHECK(callNode->_callee == "Print");
     REQUIRE(callNode->_arguments.size() == 1);
     CHECK(callNode->_arguments.front().get() == argumentNode);
-    REQUIRE(bodyNode->_items.size() == 1);
+    REQUIRE(bodyNode->_items.size() == 2);
     CHECK(bodyNode->_items.front().get() == callNode);
+    CHECK(bodyNode->_items.back().get() == returnNode);
+    CHECK(returnNode->_value.get() == returnValueNode);
 
     CHECK_FALSE(procedureNode->_returnType.has_value());
     REQUIRE(functionNode->_returnType.has_value());
@@ -248,7 +256,10 @@ TEST_CASE("ASTVisitor-ը NodeKind-ով ուղարկում է ճիշտ overload-�
     auto* variableNode = variable.get();
     auto let = node<Let>(std::move(variable), nullptr, std::move(number), 40);
     auto* letNode = let.get();
-    auto sequence = node<Sequence>(NodeList<Statement>{std::move(let)}, 40);
+    auto returnStatement = node<Return>(node<Number>(0.0, 40), 40);
+    auto* returnNode = returnStatement.get();
+    auto sequence = node<Sequence>(
+        NodeList<Statement>{std::move(let), std::move(returnStatement)}, 40);
     auto* sequenceNode = sequence.get();
     auto subroutine = node<Subroutine>(
         "Main", NodeList<Parameter>{}, std::nullopt, std::move(sequence), 40);
@@ -260,6 +271,7 @@ TEST_CASE("ASTVisitor-ը NodeKind-ով ուղարկում է ճիշտ overload-�
     CHECK(visitor.visit(*numberNode) == NodeKind::Number);
     CHECK(visitor.visit(*variableNode) == NodeKind::Variable);
     CHECK(visitor.visit(*letNode) == NodeKind::Let);
+    CHECK(visitor.visit(*returnNode) == NodeKind::Return);
     CHECK(visitor.visit(*sequenceNode) == NodeKind::Sequence);
     CHECK(visitor.visit(*subroutineNode) == NodeKind::Subroutine);
     CHECK(visitor.visit(*program) == NodeKind::Program);

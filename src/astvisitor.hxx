@@ -30,6 +30,8 @@ protected:
                 return derived().visit(static_cast<For&>(value));
             case NodeKind::Call:
                 return derived().visit(static_cast<Call&>(value));
+            case NodeKind::Return:
+                return derived().visit(static_cast<Return&>(value));
             case NodeKind::Apply:
                 return derived().visit(static_cast<Apply&>(value));
             case NodeKind::Binary:

@@ -27,6 +27,7 @@ enum class Token : int {
     To,
     Step,
     Call,
+    Return,
     End,
 
     Real,
@@ -74,8 +75,7 @@ public:
 
     Lexeme() = default;
 
-    Lexeme(Token kind, std::string value, unsigned int line)
-        : kind{kind}, value{std::move(value)}, line{line}
+    Lexeme(Token kind, std::string value, unsigned int line) : kind{kind}, value{std::move(value)}, line{line}
     {
     }
 

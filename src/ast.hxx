@@ -39,6 +39,7 @@ enum class NodeKind : std::uint8_t {
     While,
     For,
     Call,
+    Return,
     Subroutine,
     Program,
 };
@@ -69,8 +70,7 @@ class Node {
 public:
     Node() = default;
 
-    Node(NodeKind kind, Position line)
-        : kind{kind}, line{line}, _id{_nextId++}
+    Node(NodeKind kind, Position line) : kind{kind}, line{line}, _id{_nextId++}
     {
     }
 
@@ -99,8 +99,7 @@ std::unique_ptr<T> node(Args&&... args)
 
 class Expression : public Node {
 public:
-    Expression(NodeKind kind, Position line)
-        : Node{kind, line}
+    Expression(NodeKind kind, Position line) : Node{kind, line}
     {
     }
 
@@ -109,8 +108,7 @@ public:
 
 class Boolean final : public Expression {
 public:
-    Boolean(bool value, Position line)
-        : Expression{NodeKind::Boolean, line}, _value{value}
+    Boolean(bool value, Position line) : Expression{NodeKind::Boolean, line}, _value{value}
     {
     }
 
@@ -121,8 +119,7 @@ public:
 
 class Number final : public Expression {
 public:
-    Number(double value, Position line)
-        : Expression{NodeKind::Number, line}, _value{value}
+    Number(double value, Position line) : Expression{NodeKind::Number, line}, _value{value}
     {
     }
 
@@ -133,8 +130,7 @@ public:
 
 class Text final : public Expression {
 public:
-    Text(std::string_view value, Position line)
-        : Expression{NodeKind::Text, line}, _value{value}
+    Text(std::string_view value, Position line) : Expression{NodeKind::Text, line}, _value{value}
     {
     }
 
@@ -145,8 +141,7 @@ public:
 
 class Variable final : public Expression {
 public:
-    Variable(std::string_view name, Position line)
-        : Expression{NodeKind::Variable, line}, _name{name}
+    Variable(std::string_view name, Position line) : Expression{NodeKind::Variable, line}, _name{name}
     {
     }
 
@@ -157,8 +152,7 @@ public:
 
 class Unary final : public Expression {
 public:
-    Unary(Operation operation, Expression::Ptr operand, Position line)
-        : Expression{NodeKind::Unary, line}, _operation{operation}, _operand{std::move(operand)}
+    Unary(Operation operation, Expression::Ptr operand, Position line) : Expression{NodeKind::Unary, line}, _operation{operation}, _operand{std::move(operand)}
     {
     }
 
@@ -170,8 +164,7 @@ public:
 
 class Binary final : public Expression {
 public:
-    Binary(Operation operation, Expression::Ptr left, Expression::Ptr right, Position line)
-        : Expression{NodeKind::Binary, line}, _operation{operation}, _left{std::move(left)}, _right{std::move(right)}
+    Binary(Operation operation, Expression::Ptr left, Expression::Ptr right, Position line) : Expression{NodeKind::Binary, line}, _operation{operation}, _left{std::move(left)}, _right{std::move(right)}
     {
     }
 
@@ -184,8 +177,7 @@ public:
 
 class Apply final : public Expression {
 public:
-    Apply(std::string_view callee, std::vector<Expression::Ptr> arguments, Position line)
-        : Expression{NodeKind::Apply, line}, _callee{callee}, _arguments{std::move(arguments)}
+    Apply(std::string_view callee, std::vector<Expression::Ptr> arguments, Position line) : Expression{NodeKind::Apply, line}, _callee{callee}, _arguments{std::move(arguments)}
     {
     }
 
@@ -197,8 +189,7 @@ public:
 
 class Statement : public Node {
 public:
-    Statement(NodeKind kind, Position line)
-        : Node{kind, line}
+    Statement(NodeKind kind, Position line) : Node{kind, line}
     {
     }
 
@@ -207,8 +198,7 @@ public:
 
 class Sequence final : public Node {
 public:
-    Sequence(std::vector<Statement::Ptr> items, Position line)
-        : Node{NodeKind::Sequence, line}, _items{std::move(items)}
+    Sequence(std::vector<Statement::Ptr> items, Position line) : Node{NodeKind::Sequence, line}, _items{std::move(items)}
     {
     }
 
@@ -219,8 +209,7 @@ public:
 
 class Dim final : public Statement {
 public:
-    Dim(std::string_view name, Expression::Ptr size, TypeName type, bool isArray, Position line)
-        : Statement{NodeKind::Dim, line}, _name{name}, _size{std::move(size)}, _type{type}, _isArray{isArray}
+    Dim(std::string_view name, Expression::Ptr size, TypeName type, bool isArray, Position line) : Statement{NodeKind::Dim, line}, _name{name}, _size{std::move(size)}, _type{type}, _isArray{isArray}
     {
     }
 
@@ -236,8 +225,7 @@ using Parameter = Dim;
 
 class Let final : public Statement {
 public:
-    Let(Variable::Ptr variable, Expression::Ptr index, Expression::Ptr value, Position line)
-        : Statement{NodeKind::Let, line}, _variable{std::move(variable)}, _index{std::move(index)}, _value{std::move(value)}
+    Let(Variable::Ptr variable, Expression::Ptr index, Expression::Ptr value, Position line) : Statement{NodeKind::Let, line}, _variable{std::move(variable)}, _index{std::move(index)}, _value{std::move(value)}
     {
     }
 
@@ -251,8 +239,7 @@ public:
 
 class IfBranch final : public Node {
 public:
-    IfBranch(Expression::Ptr condition, Sequence::Ptr body, Position line)
-        : Node{NodeKind::IfBranch, line}, _condition{std::move(condition)}, _body{std::move(body)}
+    IfBranch(Expression::Ptr condition, Sequence::Ptr body, Position line) : Node{NodeKind::IfBranch, line}, _condition{std::move(condition)}, _body{std::move(body)}
     {
     }
 
@@ -264,8 +251,7 @@ public:
 
 class If final : public Statement {
 public:
-    If(std::vector<IfBranch::Ptr> branches, Sequence::Ptr alternative, Position line)
-        : Statement{NodeKind::If, line}, _branches{std::move(branches)}, _alternative{std::move(alternative)}
+    If(std::vector<IfBranch::Ptr> branches, Sequence::Ptr alternative, Position line) : Statement{NodeKind::If, line}, _branches{std::move(branches)}, _alternative{std::move(alternative)}
     {
     }
 
@@ -277,8 +263,7 @@ public:
 
 class While final : public Statement {
 public:
-    While(Expression::Ptr condition, Sequence::Ptr body, Position line)
-        : Statement{NodeKind::While, line}, _condition{std::move(condition)}, _body{std::move(body)}
+    While(Expression::Ptr condition, Sequence::Ptr body, Position line) : Statement{NodeKind::While, line}, _condition{std::move(condition)}, _body{std::move(body)}
     {
     }
 
@@ -291,8 +276,7 @@ public:
 class For final : public Statement {
 public:
     For(Variable::Ptr parameter, Expression::Ptr begin, Expression::Ptr end,
-        Number::Ptr step, Sequence::Ptr body, Position line)
-        : Statement{NodeKind::For, line}, _parameter{std::move(parameter)}, _begin{std::move(begin)}, _end{std::move(end)}, _step{std::move(step)}, _body{std::move(body)}
+        Number::Ptr step, Sequence::Ptr body, Position line) : Statement{NodeKind::For, line}, _parameter{std::move(parameter)}, _begin{std::move(begin)}, _end{std::move(end)}, _step{std::move(step)}, _body{std::move(body)}
     {
     }
 
@@ -305,12 +289,9 @@ public:
     const Sequence::Ptr _body;
 };
 
-// CALL-ով արված պրոցեդուրային կանչ։ Apply-ից առանձին հանգույց է, քանի որ
-// Call-ը արժեք չի պահանջում և սեմանտիկորեն միայն պրոցեդուրա է ընդունում։
 class Call final : public Statement {
 public:
-    Call(std::string_view callee, std::vector<Expression::Ptr> arguments, Position line)
-        : Statement{NodeKind::Call, line}, _callee{callee}, _arguments{std::move(arguments)}
+    Call(std::string_view callee, std::vector<Expression::Ptr> arguments, Position line) : Statement{NodeKind::Call, line}, _callee{callee}, _arguments{std::move(arguments)}
     {
     }
 
@@ -320,11 +301,21 @@ public:
     const std::vector<Expression::Ptr> _arguments;
 };
 
+class Return final : public Statement {
+public:
+    Return(Expression::Ptr value, Position line) : Statement{NodeKind::Return, line}, _value{std::move(value)}
+    {
+    }
+
+    using Ptr = std::unique_ptr<Return>;
+
+    const Expression::Ptr _value;
+};
+
 class Subroutine final : public Node {
 public:
     Subroutine(std::string_view name, std::vector<Parameter::Ptr> parameters,
-        std::optional<TypeName> returnType, Sequence::Ptr body, Position line)
-        : Node{NodeKind::Subroutine, line}, _name{name}, _parameters{std::move(parameters)}, _returnType{returnType}, _body{std::move(body)}
+        std::optional<TypeName> returnType, Sequence::Ptr body, Position line) : Node{NodeKind::Subroutine, line}, _name{name}, _parameters{std::move(parameters)}, _returnType{returnType}, _body{std::move(body)}
     {
     }
 
@@ -338,8 +329,7 @@ public:
 
 class Program final : public Node {
 public:
-    Program(std::vector<Subroutine::Ptr> subroutines, Position line)
-        : Node{NodeKind::Program, line}, _subroutines{std::move(subroutines)}
+    Program(std::vector<Subroutine::Ptr> subroutines, Position line) : Node{NodeKind::Program, line}, _subroutines{std::move(subroutines)}
     {
     }
 

@@ -14,7 +14,7 @@ Sequence  = NewLines { Statement NewLines }.
 
 NewLines = NEWLINE { NEWLINE }.
 
-Statement = Dim | Let | If | While | For | Call.
+Statement = Dim | Let | If | While | For | Call | Return.
 
 Let = 'LET' IDENT [ '[' Expression ']' ] '=' Expression.
 
@@ -27,6 +27,8 @@ While = 'WHILE' Expression Sequence 'END' 'WHILE'.
 For = 'FOR' IDENT '=' Expression 'TO' Expression [ 'STEP' ['+' | '-'] NUMBER ] Sequence 'END' 'FOR'.
 
 Call = 'CALL' IDENT [ ExpressionList ].
+
+Return = 'RETURN' Expression.
 
 ExpressionList = Expression { ',' Expression }.
 
