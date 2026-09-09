@@ -108,11 +108,6 @@ void SemanticModel::bind(NodeId node, SymbolId symbol)
     _symbols.insert_or_assign(node, symbol);
 }
 
-void SemanticModel::bindReturnValue(NodeId subroutine, SymbolId symbol)
-{
-    _returnValues.insert_or_assign(subroutine, symbol);
-}
-
 void SemanticModel::setEntryPoint(SymbolId symbol)
 {
     _entryPoint = symbol;
@@ -130,13 +125,6 @@ std::optional<SymbolId> SemanticModel::symbol(NodeId node) const
     return std::nullopt;
 }
 
-std::optional<SymbolId> SemanticModel::returnValue(NodeId subroutine) const
-{
-    if( const auto entry = _returnValues.find(subroutine); entry != _returnValues.end() )
-        return entry->second;
-    return std::nullopt;
-}
-
 std::optional<SymbolId> SemanticModel::entryPoint() const
 {
     return _entryPoint;
@@ -149,8 +137,7 @@ const Type* SemanticModel::type(NodeId node) const
     return nullptr;
 }
 
-SemanticAnalyzer::SemanticAnalyzer(SymbolTable& symbols, SemanticModel& model, Diagnostics& diagnostics)
-    : _symbols{symbols}, _model{model}, _diagnostics{diagnostics}
+SemanticAnalyzer::SemanticAnalyzer(SymbolTable& symbols, SemanticModel& model, Diagnostics& diagnostics) : _symbols{symbols}, _model{model}, _diagnostics{diagnostics}
 {
 }
 
@@ -342,6 +329,23 @@ void SemanticAnalyzer::visit(ScalarType&)
 
 void SemanticAnalyzer::visit(ArrayType&)
 {
+}
+
+void SemanticAnalyzer::visit(Return& statement)
+{
+    const auto valueType = expressionType(*statement._value);
+    const auto scalarValue = requireScalar(*statement._value);
+
+    if( _currentReturnType == nullptr ) {
+        report(statement, "RETURN հրամանը թույլատրելի է միայն ֆունկցիայում։");
+        return;
+    }
+
+    const auto wrongValueType = scalarValue && typeMismatch(valueType, *_currentReturnType);
+    if( wrongValueType )
+        report(*statement._value,
+            std::format("Ֆունկցիայից պետք է վերադարձվի {}, բայց ստացվել է {}։",
+                static_cast<const Type&>(*_currentReturnType), *valueType));
 }
 
 void SemanticAnalyzer::visit(Boolean& boolean)
@@ -541,10 +545,15 @@ void SemanticAnalyzer::declareSubroutines(const Program& program)
 void SemanticAnalyzer::analyzeSubroutine(Subroutine& subroutine)
 {
     _symbols.openScope();
+    _currentReturnType = subroutine._returnType.get();
     declareParameters(subroutine);
-    declareReturnValue(subroutine);
     declareLocals(*subroutine._body);
     visit(*subroutine._body);
+
+    if( subroutine._name != "Main" && _currentReturnType != nullptr && !definitelyReturns(*subroutine._body) )
+        report(subroutine, std::format("'{}' ֆունկցիայի ոչ բոլոր կատարման ուղիներն են արժեք վերադարձնում։", subroutine._name));
+
+    _currentReturnType = nullptr;
     _symbols.closeScope();
 }
 
@@ -559,20 +568,6 @@ void SemanticAnalyzer::declareParameters(const Subroutine& subroutine)
         else
             _model.bind(parameter->id(), id);
     }
-}
-
-void SemanticAnalyzer::declareReturnValue(const Subroutine& subroutine)
-{
-    if( !subroutine._returnType )
-        return;
-
-    const auto& name = subroutine._name;
-    const auto storage = VariableStorage::ReturnValue;
-    const auto id = _symbols.declareVariable(name, *subroutine._returnType, storage);
-    if( id == UnknownSymbol )
-        report(subroutine, std::format("'{}' անունն արդեն սահմանված է այս ենթածրագրում։", subroutine._name));
-    else
-        _model.bindReturnValue(subroutine.id(), id);
 }
 
 void SemanticAnalyzer::declareLocals(const Sequence& sequence)
@@ -735,6 +730,27 @@ void SemanticAnalyzer::validateIndex(Expression& index)
     const auto wrongIndexType = scalarIndex && typeMismatch(indexType, realType);
     if( wrongIndexType )
         report(index, std::format("Զանգվածի ինդեքսը պետք է լինի REAL, բայց ստացվել է {}։", *indexType));
+}
+
+bool SemanticAnalyzer::definitelyReturns(const Sequence& sequence) const
+{
+    return std::ranges::any_of(sequence._items,
+        [this](const auto& statement) { return definitelyReturns(*statement); });
+}
+
+bool SemanticAnalyzer::definitelyReturns(const Statement& statement) const
+{
+    if( statement.kind == NodeKind::Return )
+        return true;
+    if( statement.kind != NodeKind::If )
+        return false;
+
+    const auto& conditional = static_cast<const If&>(statement);
+    if( !conditional._alternative || !definitelyReturns(*conditional._alternative) )
+        return false;
+
+    return std::ranges::all_of(conditional._branches,
+        [this](const auto& branch) { return definitelyReturns(*branch->_body); });
 }
 
 void SemanticAnalyzer::report(const Node& node, std::string_view message)

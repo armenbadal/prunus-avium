@@ -14,18 +14,15 @@ namespace avium {
 class SemanticModel {
 public:
     void bind(NodeId node, SymbolId symbol);
-    void bindReturnValue(NodeId subroutine, SymbolId symbol);
     void setEntryPoint(SymbolId symbol);
     void setType(NodeId node, const Type& type);
 
     std::optional<SymbolId> symbol(NodeId node) const;
-    std::optional<SymbolId> returnValue(NodeId subroutine) const;
     std::optional<SymbolId> entryPoint() const;
     const Type* type(NodeId node) const;
 
 private:
     std::unordered_map<NodeId, SymbolId> _symbols;
-    std::unordered_map<NodeId, SymbolId> _returnValues;
     std::optional<SymbolId> _entryPoint;
     std::unordered_map<NodeId, const Type*> _types;
 };
@@ -48,6 +45,7 @@ public:
     void visit(While& node);
     void visit(For& node);
     void visit(Call& node);
+    void visit(Return& node);
 
     void visit(ScalarType& node);
     void visit(ArrayType& node);
@@ -64,7 +62,6 @@ private:
     void declareSubroutines(const Program& program);
     void analyzeSubroutine(Subroutine& subroutine);
     void declareParameters(const Subroutine& subroutine);
-    void declareReturnValue(const Subroutine& subroutine);
     void declareLocals(const Sequence& sequence);
     void declareDim(const Dim& dim);
     void declareForVariable(const For& loop);
@@ -76,11 +73,14 @@ private:
     bool isArrayExpression(const Expression& expression) const;
     bool requireScalar(const Expression& expression);
     void validateIndex(Expression& index);
+    bool definitelyReturns(const Sequence& sequence) const;
+    bool definitelyReturns(const Statement& statement) const;
     void report(const Node& node, std::string_view message);
 
     SymbolTable& _symbols;
     SemanticModel& _model;
     Diagnostics& _diagnostics;
+    const ScalarType* _currentReturnType{nullptr};
 };
 
 } // namespace avium

@@ -70,3 +70,13 @@ TEST_CASE("AstLisp emits calls and indexed assignments", "[astlisp]")
     CHECK(result.find("(avium-call :callee \"Print\"") != std::string::npos);
     CHECK(result.find(":index (avium-number :value 0)") != std::string::npos);
 }
+
+TEST_CASE("AstLisp emits return statements", "[astlisp]")
+{
+    auto returnStatement = node<Return>(node<Boolean>(true, 1), 1);
+    auto body = node<Sequence>(
+        NodeList<Statement>{std::move(returnStatement)}, 1);
+
+    const auto result = emit(program({subroutine("Main", std::move(body))}));
+    CHECK(result.find("(avium-return :value (avium-boolean :value T))") != std::string::npos);
+}

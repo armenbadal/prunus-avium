@@ -33,6 +33,7 @@ private:
     While::Ptr parseWhile();
     For::Ptr parseFor();
     Call::Ptr parseCall();
+    Return::Ptr parseReturn();
 
     std::vector<Expression::Ptr> parseExpressionList();
     Expression::Ptr parseExpression();

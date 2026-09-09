@@ -25,6 +25,7 @@ public:
     std::string visit(While& node);
     std::string visit(For& node);
     std::string visit(Call& node);
+    std::string visit(Return& node);
 
     std::string visit(ScalarType& node);
     std::string visit(ArrayType& node);

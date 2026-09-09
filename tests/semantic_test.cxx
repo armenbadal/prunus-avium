@@ -21,8 +21,24 @@ Subroutine::Ptr subroutine(std::string_view name,
     ScalarType::Ptr type;
     if( returnType )
         type = node<ScalarType>(*returnType, line);
+    std::vector<Statement::Ptr> statements;
+    if( returnType ) {
+        Expression::Ptr value;
+        switch( *returnType ) {
+            case ScalarType::Name::Bool:
+                value = node<Boolean>(false, line);
+                break;
+            case ScalarType::Name::Real:
+                value = node<Number>(0.0, line);
+                break;
+            case ScalarType::Name::Text:
+                value = node<Text>("", line);
+                break;
+        }
+        statements.push_back(node<Return>(std::move(value), line));
+    }
     return node<Subroutine>(name, std::move(parameters), std::move(type),
-        node<Sequence>(NodeList<Statement>{}, line), line);
+        node<Sequence>(std::move(statements), line), line);
 }
 
 Subroutine::Ptr subroutineWithBody(std::string_view name,
@@ -203,15 +219,29 @@ TEST_CASE("Semantic analyzer rejects duplicate names across nested blocks", "[se
     CHECK(std::get<0>(result.errors.front()) == 4);
 }
 
-TEST_CASE("Function return variable cannot duplicate a parameter", "[semantic]")
+TEST_CASE("A parameter may have the function name", "[semantic]")
 {
     NodeList<Parameter> parameters{
         test::scalarDeclaration<Parameter>("Value", ScalarType::Name::Real, 2)};
+    auto returnStatement = node<Return>(node<Variable>("Value", 3), 3);
     const auto result = analyze({subroutine("Main"),
-        subroutine("Value", std::move(parameters), ScalarType::Name::Real, 2)});
+        subroutineWithBody("Value", {std::move(returnStatement)},
+            std::move(parameters), ScalarType::Name::Real, 2)});
+
+    CHECK(result.valid);
+    CHECK(result.errors.empty());
+}
+
+TEST_CASE("A function name is not an implicit return variable", "[semantic]")
+{
+    auto assignment = node<Let>(node<Variable>("Value", 3), nullptr,
+        node<Number>(1.0, 3), 3);
+    const auto result = analyze({subroutine("Main"),
+        subroutineWithBody("Value", {std::move(assignment)}, {},
+            ScalarType::Name::Real, 2)});
 
     CHECK_FALSE(result.valid);
-    CHECK(result.errors.size() == 1);
+    CHECK(result.errors.size() == 2);
 }
 
 TEST_CASE("Implicit FOR variable is visible in the whole subroutine", "[semantic]")
@@ -362,12 +392,10 @@ TEST_CASE("Semantic analyzer rejects an array as a scalar value", "[semantic]")
     CHECK(result.errors.size() == 1);
 }
 
-TEST_CASE("Function return variable uses the declared return type", "[semantic]")
+TEST_CASE("RETURN uses the declared function return type", "[semantic]")
 {
-    auto validReturn = node<Let>(node<Variable>("Value", 3), nullptr,
-        node<Number>(1.0, 3), 3);
-    auto invalidReturn = node<Let>(node<Variable>("Broken", 6), nullptr,
-        node<Text>("wrong", 6), 6);
+    auto validReturn = node<Return>(node<Number>(1.0, 3), 3);
+    auto invalidReturn = node<Return>(node<Text>("wrong", 6), 6);
     const auto result = analyze({subroutine("Main"),
         subroutineWithBody(
             "Value", {std::move(validReturn)}, {}, ScalarType::Name::Real, 2),
@@ -375,7 +403,78 @@ TEST_CASE("Function return variable uses the declared return type", "[semantic]"
             "Broken", {std::move(invalidReturn)}, {}, ScalarType::Name::Real, 5)});
 
     CHECK_FALSE(result.valid);
+    REQUIRE(result.errors.size() == 1);
+    CHECK(std::get<1>(result.errors.front()) == "Ֆունկցիայից պետք է վերադարձվի REAL, բայց ստացվել է TEXT։");
+}
+
+TEST_CASE("RETURN is accepted only in a function", "[semantic]")
+{
+    auto returnStatement = node<Return>(node<Number>(1.0, 2), 2);
+    const auto result = analyze({subroutineWithBody(
+        "Main", {std::move(returnStatement)})});
+
+    CHECK_FALSE(result.valid);
+    REQUIRE(result.errors.size() == 1);
+    CHECK(std::get<1>(result.errors.front()) == "RETURN հրամանը թույլատրելի է միայն ֆունկցիայում։");
+}
+
+TEST_CASE("RETURN requires a scalar value", "[semantic]")
+{
+    NodeList<Parameter> parameters{
+        test::arrayDeclaration<Parameter>("items", nullptr, ScalarType::Name::Real, 2)};
+    auto returnStatement = node<Return>(node<Variable>("items", 3), 3);
+    const auto result = analyze({subroutine("Main"),
+        subroutineWithBody("First", {std::move(returnStatement)},
+            std::move(parameters), ScalarType::Name::Real, 2)});
+
+    CHECK_FALSE(result.valid);
     CHECK(result.errors.size() == 1);
+}
+
+TEST_CASE("A function must return on every execution path", "[semantic]")
+{
+    SECTION("missing RETURN")
+    {
+        const auto result = analyze({subroutine("Main"),
+            subroutineWithBody("Value", {}, {}, ScalarType::Name::Real, 2)});
+
+        CHECK_FALSE(result.valid);
+        REQUIRE(result.errors.size() == 1);
+        CHECK(std::get<1>(result.errors.front()) == "'Value' ֆունկցիայի ոչ բոլոր կատարման ուղիներն են արժեք վերադարձնում։");
+    }
+
+    SECTION("complete IF")
+    {
+        auto firstReturn = node<Return>(node<Number>(1.0, 4), 4);
+        auto branch = node<IfBranch>(node<Boolean>(true, 3),
+            node<Sequence>(NodeList<Statement>{std::move(firstReturn)}, 3), 3);
+        auto secondReturn = node<Return>(node<Number>(2.0, 6), 6);
+        auto alternative = node<Sequence>(
+            NodeList<Statement>{std::move(secondReturn)}, 5);
+        auto conditional = node<If>(NodeList<IfBranch>{std::move(branch)},
+            std::move(alternative), 3);
+        const auto result = analyze({subroutine("Main"),
+            subroutineWithBody("Value", {std::move(conditional)}, {},
+                ScalarType::Name::Real, 2)});
+
+        CHECK(result.valid);
+        CHECK(result.errors.empty());
+    }
+
+    SECTION("IF without ELSE")
+    {
+        auto returnStatement = node<Return>(node<Number>(1.0, 4), 4);
+        auto branch = node<IfBranch>(node<Boolean>(true, 3),
+            node<Sequence>(NodeList<Statement>{std::move(returnStatement)}, 3), 3);
+        auto conditional = node<If>(
+            NodeList<IfBranch>{std::move(branch)}, nullptr, 3);
+        const auto result = analyze({subroutine("Main"),
+            subroutineWithBody("Value", {std::move(conditional)}, {},
+                ScalarType::Name::Real, 2)});
+
+        CHECK_FALSE(result.valid);
+        CHECK(result.errors.size() == 1);
+    }
 }
 
 TEST_CASE("Assignment checks an inferred expression result type", "[semantic]")

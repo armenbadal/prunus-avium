@@ -64,6 +64,7 @@ TEST_CASE("Կեռասի բոլոր token-ներն ունեն canonical անու�
         {Token::To, "TO"},
         {Token::Step, "STEP"},
         {Token::Call, "CALL"},
+        {Token::Return, "RETURN"},
         {Token::End, "END"},
 
         {Token::Real, "REAL"},

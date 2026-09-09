@@ -1,16 +1,16 @@
 
 SUB IsPrime(n AS REAL) AS BOOL
   IF n <= 2 THEN
-  	 LET IsPrime = TRUE
+    RETURN TRUE
   ELSEIF n MOD 2 = 0 THEN
-    LET IsPrime = FALSE
+    RETURN FALSE
   ELSE
     DIM k AS REAL
     LET k = 1 + SQR(n)
     WHILE (n MOD k <> 0) AND (k > 2)
       LET k = k - 1
     END WHILE
-    LET IsPrime = k <> 2
+    RETURN k <> 2
   END IF
 END SUB
 
