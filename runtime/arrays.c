@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-struct avium_array {
+struct _avium_array {
     avium_element_type type;
     void* elements;
     size_t length;

@@ -93,11 +93,12 @@ const std::vector<SubroutineSignature>& builtinSignatures()
     const auto& real = scalarType(ScalarType::Name::Real);
     const auto& text = scalarType(ScalarType::Name::Text);
     static const std::vector<SubroutineSignature> signatures{
-        {"Print", {nullptr}, nullptr, true},
+        {"Print", {&text}, nullptr, true},
         {"Input", {}, &text, true},
         {"NUM", {&text}, &real, true},
         {"SQR", {&real}, &real, true},
-    };
+        {"STR", {nullptr}, &text, true},
+        {"LEN", {nullptr}, &real, true}};
     return signatures;
 }
 
@@ -679,6 +680,16 @@ void SemanticAnalyzer::validateArguments(const Node& node, std::string_view name
         const auto parameterType = signature.parameters[index];
 
         if( argumentType == nullptr )
+            continue;
+
+        if( name == "LEN" ) {
+            const auto validArgument = argumentType->isArray() || argumentType->base()._name == ScalarType::Name::Text;
+            if( !validArgument )
+                report(*argument, "LEN-ի արգումենտը պետք է լինի TEXT կամ զանգված։");
+            continue;
+        }
+
+        if( name == "STR" )
             continue;
 
         if( parameterType == nullptr ) {

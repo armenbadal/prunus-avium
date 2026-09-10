@@ -977,33 +977,45 @@ TEST_CASE("Semantic analyzer checks array argument element types", "[semantic]")
 
 TEST_CASE("Semantic analyzer accepts builtin subroutine signatures", "[semantic]")
 {
-    SECTION("Print accepts every scalar type")
+    SECTION("Print accepts text")
     {
-        for( const auto type : {ScalarType::Name::Bool, ScalarType::Name::Real, ScalarType::Name::Text} ) {
-            Expression::Ptr argument;
-            if( type == ScalarType::Name::Bool ) {
-                argument = node<Boolean>(true, 2);
-            }
-            else if( type == ScalarType::Name::Real ) {
-                argument = node<Number>(1.0, 2);
-            }
-            else {
-                argument = node<Text>("text", 2);
-            }
-            auto call = node<Call>(
-                "Print", NodeList<Expression>{std::move(argument)}, 2);
-            const auto result = analyze({subroutineWithBody("Main", {std::move(call)})});
-            CHECK(result.valid);
-        }
+        auto call = node<Call>(
+            "Print", NodeList<Expression>{node<Text>("text", 2)}, 2);
+        const auto result = analyze({subroutineWithBody("Main", {std::move(call)})});
+        CHECK(result.valid);
     }
 
-    SECTION("Input and NUM expose their result types")
+    SECTION("Input, NUM, and STR expose their result types")
     {
         auto input = node<Apply>("Input", NodeList<Expression>{}, 2);
         auto number = node<Apply>("NUM",
             NodeList<Expression>{std::move(input)}, 2);
         const auto result = analyzeExpression(std::move(number), ScalarType::Name::Real);
         CHECK(result.valid);
+
+        auto string = node<Apply>("STR",
+            NodeList<Expression>{node<Number>(1.0, 2)}, 2);
+        const auto stringResult = analyzeExpression(std::move(string), ScalarType::Name::Text);
+        CHECK(stringResult.valid);
+    }
+
+    SECTION("LEN accepts text and arrays")
+    {
+        auto textLength = node<Apply>("LEN",
+            NodeList<Expression>{node<Text>("text", 2)}, 2);
+        auto textResult = analyzeExpression(std::move(textLength), ScalarType::Name::Real);
+        CHECK(textResult.valid);
+
+        auto items = test::arrayDeclaration(
+            "items", node<Number>(3.0, 2), ScalarType::Name::Text, 2);
+        auto arrayLength = node<Apply>("LEN",
+            NodeList<Expression>{node<Variable>("items", 3)}, 3);
+        auto result = test::scalarDeclaration("length", ScalarType::Name::Real, 3);
+        auto assignment = node<Let>(node<Variable>("length", 3), nullptr,
+            std::move(arrayLength), 3);
+        const auto analysis = analyze({subroutineWithBody(
+            "Main", {std::move(items), std::move(result), std::move(assignment)})});
+        CHECK(analysis.valid);
     }
 }
 
@@ -1029,6 +1041,15 @@ TEST_CASE("Semantic analyzer rejects calls that violate builtin signatures", "[s
         CHECK(result.errors.size() == 1);
     }
 
+    SECTION("Print rejects non-text scalars")
+    {
+        auto call = node<Call>(
+            "Print", NodeList<Expression>{node<Number>(1.0, 2)}, 2);
+        const auto result = analyze({subroutineWithBody("Main", {std::move(call)})});
+        CHECK_FALSE(result.valid);
+        CHECK(result.errors.size() == 1);
+    }
+
     SECTION("argument type")
     {
         auto number = node<Apply>("NUM",
@@ -1036,6 +1057,30 @@ TEST_CASE("Semantic analyzer rejects calls that violate builtin signatures", "[s
         const auto result = analyzeExpression(std::move(number), ScalarType::Name::Real);
         CHECK_FALSE(result.valid);
         CHECK(result.errors.size() == 1);
+    }
+
+    SECTION("LEN rejects non-text scalars")
+    {
+        auto length = node<Apply>("LEN",
+            NodeList<Expression>{node<Number>(1.0, 2)}, 2);
+        const auto result = analyzeExpression(std::move(length), ScalarType::Name::Real);
+        CHECK_FALSE(result.valid);
+        CHECK(result.errors.size() == 1);
+    }
+
+    SECTION("STR accepts arrays")
+    {
+        auto items = test::arrayDeclaration(
+            "items", node<Number>(2.0, 2), ScalarType::Name::Text, 2);
+        auto string = node<Apply>("STR",
+            NodeList<Expression>{node<Variable>("items", 3)}, 3);
+        auto result = test::scalarDeclaration("result", ScalarType::Name::Text, 3);
+        auto assignment = node<Let>(node<Variable>("result", 3), nullptr,
+            std::move(string), 3);
+        const auto analysis = analyze({subroutineWithBody(
+            "Main", {std::move(items), std::move(result), std::move(assignment)})});
+        CHECK(analysis.valid);
+        CHECK(analysis.errors.empty());
     }
 
     SECTION("call kind")

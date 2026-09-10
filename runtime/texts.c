@@ -7,12 +7,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct _avium_text {
-    const char *data;
-    size_t length;
-    bool owned;
-} avium_text;
-
 static void text_error(unsigned line, const char* message)
 {
     fprintf(stderr, "%u: %s\n", line, message);
@@ -151,4 +145,9 @@ double avium_num(avium_text value, unsigned line)
     if( !valid )
         text_error(line, "Տեքստը REAL արժեք չի ներկայացնում։");
     return result;
+}
+
+double avium_text_length(avium_text value)
+{
+    return (double)value.length;
 }
