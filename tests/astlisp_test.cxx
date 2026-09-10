@@ -18,7 +18,7 @@ Program::Ptr program(NodeList<Subroutine> subroutines)
 Subroutine::Ptr subroutine(std::string_view name, Sequence::Ptr body)
 {
     return node<Subroutine>(
-        name, NodeList<Parameter>{}, std::nullopt, std::move(body), 1);
+        name, NodeList<Parameter>{}, nullptr, std::move(body), 1);
 }
 
 std::string emit(Program::Ptr value)
@@ -33,6 +33,17 @@ std::string emit(Program::Ptr value)
 TEST_CASE("AstLisp emits an empty program", "[astlisp]")
 {
     CHECK(emit(program({})) == "(avium-program :subroutines)\n");
+}
+
+TEST_CASE("AstLisp emits scalar and array types", "[astlisp]")
+{
+    AstLisp lisper;
+    Type::Ptr scalar = node<ScalarType>(ScalarType::Name::Text, 1);
+    CHECK(lisper.visit(*scalar) == "(avium-scalar-type :name \"TEXT\")");
+
+    Type::Ptr array = node<ArrayType>(
+        node<ScalarType>(ScalarType::Name::Real, 1), node<Number>(3.0, 1), 1);
+    CHECK(lisper.visit(*array) == "(avium-array-type :base (avium-scalar-type :name \"REAL\") :size (avium-number :value 3))");
 }
 
 TEST_CASE("AstLisp emits expressions and statements", "[astlisp]")

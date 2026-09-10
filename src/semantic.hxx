@@ -14,14 +14,17 @@ namespace avium {
 class SemanticModel {
 public:
     void bind(NodeId node, SymbolId symbol);
-    void setType(NodeId node, TypeName type);
+    void setEntryPoint(SymbolId symbol);
+    void setType(NodeId node, const Type& type);
 
     std::optional<SymbolId> symbol(NodeId node) const;
-    std::optional<TypeName> type(NodeId node) const;
+    std::optional<SymbolId> entryPoint() const;
+    const Type* type(NodeId node) const;
 
 private:
     std::unordered_map<NodeId, SymbolId> _symbols;
-    std::unordered_map<NodeId, TypeName> _types;
+    std::optional<SymbolId> _entryPoint;
+    std::unordered_map<NodeId, const Type*> _types;
 };
 
 class SemanticAnalyzer : public ASTVisitor<SemanticAnalyzer> {
@@ -44,6 +47,8 @@ public:
     void visit(Call& node);
     void visit(Return& node);
 
+    void visit(ScalarType& node);
+    void visit(ArrayType& node);
     void visit(Boolean& node);
     void visit(Number& node);
     void visit(Text& node);
@@ -64,20 +69,18 @@ private:
     std::optional<SymbolId> resolveVariable(const Variable& variable);
     std::optional<SymbolId> resolveSubroutine(const Node& node, std::string_view name);
     void validateArguments(const Node& node, std::string_view name, const std::vector<Expression::Ptr>& arguments, const SubroutineSignature& signature);
-    TypeName expressionType(Expression& expression);
+    const Type* expressionType(Expression& expression);
     bool isArrayExpression(const Expression& expression) const;
     bool requireScalar(const Expression& expression);
     void validateIndex(Expression& index);
-    ParameterInfo parameterInfo(const Dim& parameter) const;
     bool definitelyReturns(const Sequence& sequence) const;
     bool definitelyReturns(const Statement& statement) const;
-
     void report(const Node& node, std::string_view message);
 
     SymbolTable& _symbols;
     SemanticModel& _model;
     Diagnostics& _diagnostics;
-    std::optional<TypeName> _currentReturnType;
+    const ScalarType* _currentReturnType{nullptr};
 };
 
 } // namespace avium

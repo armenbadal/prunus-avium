@@ -64,8 +64,6 @@ enum class Token : int {
     Eof,
 };
 
-std::string toString(Token token);
-
 // Scanner-ի և parser-ի միջև փոխանցվող մեկ բառային տարր։
 class Lexeme {
 public:
@@ -75,7 +73,10 @@ public:
 
     Lexeme() = default;
 
-    Lexeme(Token kind, std::string value, unsigned int line) : kind{kind}, value{std::move(value)}, line{line}
+    Lexeme(Token kind, std::string value, unsigned int line)
+        : kind{kind}
+        , value{std::move(value)}
+        , line{line}
     {
     }
 

@@ -30,6 +30,26 @@ std::string AstLisp::visit(Variable& node)
     return std::format("(avium-variable :name \"{}\")", node._name);
 }
 
+std::string AstLisp::visit(ScalarType& node)
+{
+    switch( node._name ) {
+        case ScalarType::Name::Real:
+            return "(avium-scalar-type :name \"REAL\")";
+        case ScalarType::Name::Text:
+            return "(avium-scalar-type :name \"TEXT\")";
+        case ScalarType::Name::Bool:
+            return "(avium-scalar-type :name \"BOOL\")";
+    }
+    std::unreachable();
+}
+
+std::string AstLisp::visit(ArrayType& node)
+{
+    const auto size = node._size ? visit(*node._size) : "NIL";
+    return std::format("(avium-array-type :base {} :size {})",
+        visit(*node._base), size);
+}
+
 std::string AstLisp::visit(Unary& node)
 {
     return std::format("(avium-unary :operation \"{}\" :operand {})",
@@ -57,9 +77,8 @@ std::string AstLisp::visit(Let& node)
 
 std::string AstLisp::visit(Dim& node)
 {
-    return std::format("(avium-dim :name \"{}\" :size {} :type \"{}\" :array {})",
-        node._name, node._size ? visit(*node._size) : "NIL", node._type,
-        node._isArray ? "T" : "NIL");
+    return std::format("(avium-dim :name \"{}\" :type {})",
+        node._name, visit(*node._type));
 }
 
 std::string AstLisp::visit(If& node)
@@ -105,8 +124,8 @@ std::string AstLisp::visit(Sequence& node)
 
 std::string AstLisp::visit(Subroutine& node)
 {
-    const auto returnType = node._returnType ? std::format("{}", *node._returnType) : "NIL";
-    return std::format("(avium-subroutine :name \"{}\" :parameters '({}) :return-type \"{}\" :body {})",
+    const auto returnType = node._returnType ? visit(*node._returnType) : "NIL";
+    return std::format("(avium-subroutine :name \"{}\" :parameters '({}) :return-type {} :body {})",
         node._name, visitVector(node._parameters), returnType, visit(*node._body));
 }
 

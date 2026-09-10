@@ -40,11 +40,17 @@ TEST_CASE("Parser parses a subroutine and its parameters", "[parser]")
     const auto& subroutine = result.program->_subroutines.front();
     CHECK(subroutine->_name == "Add");
     REQUIRE(subroutine->_parameters.size() == 2);
-    CHECK(subroutine->_parameters[0]->_type == TypeName::Real);
-    CHECK_FALSE(subroutine->_parameters[0]->_isArray);
-    CHECK(subroutine->_parameters[1]->_type == TypeName::Text);
-    CHECK(subroutine->_parameters[1]->_isArray);
-    CHECK(subroutine->_returnType == TypeName::Real);
+    REQUIRE(subroutine->_parameters[0]->_type->kind == NodeKind::ScalarType);
+    const auto& scalar = static_cast<const ScalarType&>(
+        *subroutine->_parameters[0]->_type);
+    CHECK(scalar._name == ScalarType::Name::Real);
+    REQUIRE(subroutine->_parameters[1]->_type->kind == NodeKind::ArrayType);
+    const auto& array = static_cast<const ArrayType&>(
+        *subroutine->_parameters[1]->_type);
+    CHECK(array._base->_name == ScalarType::Name::Text);
+    CHECK(array.isOpen());
+    REQUIRE(subroutine->_returnType);
+    CHECK(subroutine->_returnType->_name == ScalarType::Name::Real);
     REQUIRE(subroutine->_body->_items.size() == 1);
     REQUIRE(subroutine->_body->_items.front()->kind == NodeKind::Return);
     const auto& returnStatement =
@@ -99,6 +105,19 @@ TEST_CASE("Parser reports malformed input", "[parser]")
 {
     const auto result = parse("SUB Main\nLET x =\nEND SUB\n");
     CHECK(result.diagnostics.count() > 0);
+}
+
+TEST_CASE("Parser omits declarations without a type", "[parser]")
+{
+    const auto result = parse("SUB Main(value AS)\n"
+                              "DIM item AS\n"
+                              "END SUB\n");
+
+    CHECK(result.diagnostics.count() == 2);
+    REQUIRE(result.program->_subroutines.size() == 1);
+    const auto& main = result.program->_subroutines.front();
+    CHECK(main->_parameters.empty());
+    CHECK(main->_body->_items.empty());
 }
 
 TEST_CASE("All bundled examples follow the Cherry grammar", "[parser][examples]")

@@ -16,36 +16,40 @@ namespace {
 
 Subroutine::Ptr subroutine(std::string_view name,
     NodeList<Parameter> parameters = {},
-    std::optional<TypeName> returnType = std::nullopt, Position line = 1)
+    std::optional<ScalarType::Name> returnType = std::nullopt, Position line = 1)
 {
+    ScalarType::Ptr type;
+    if( returnType )
+        type = node<ScalarType>(*returnType, line);
     std::vector<Statement::Ptr> statements;
-    if( returnType.has_value() && *returnType != TypeName::Unknown ) {
+    if( returnType ) {
         Expression::Ptr value;
         switch( *returnType ) {
-            case TypeName::Bool:
+            case ScalarType::Name::Bool:
                 value = node<Boolean>(false, line);
                 break;
-            case TypeName::Real:
+            case ScalarType::Name::Real:
                 value = node<Number>(0.0, line);
                 break;
-            case TypeName::Text:
+            case ScalarType::Name::Text:
                 value = node<Text>("", line);
-                break;
-            case TypeName::Unknown:
                 break;
         }
         statements.push_back(node<Return>(std::move(value), line));
     }
-    return node<Subroutine>(name, std::move(parameters), returnType,
+    return node<Subroutine>(name, std::move(parameters), std::move(type),
         node<Sequence>(std::move(statements), line), line);
 }
 
 Subroutine::Ptr subroutineWithBody(std::string_view name,
     NodeList<Statement> statements,
     NodeList<Parameter> parameters = {},
-    std::optional<TypeName> returnType = std::nullopt, Position line = 1)
+    std::optional<ScalarType::Name> returnType = std::nullopt, Position line = 1)
 {
-    return node<Subroutine>(name, std::move(parameters), returnType,
+    ScalarType::Ptr type;
+    if( returnType )
+        type = node<ScalarType>(*returnType, line);
+    return node<Subroutine>(name, std::move(parameters), std::move(type),
         node<Sequence>(std::move(statements), line), line);
 }
 
@@ -65,9 +69,9 @@ AnalysisResult analyze(NodeList<Subroutine> subroutines)
     return {valid, diagnostics.errors()};
 }
 
-AnalysisResult analyzeExpression(Expression::Ptr expression, TypeName resultType)
+AnalysisResult analyzeExpression(Expression::Ptr expression, ScalarType::Name resultType)
 {
-    auto declaration = node<Dim>("result", nullptr, resultType, false, 1);
+    auto declaration = test::scalarDeclaration("result", resultType, 1);
     auto assignment = node<Let>(node<Variable>("result", expression->line), nullptr,
         std::move(expression), 1);
     return analyze({subroutineWithBody(
@@ -104,8 +108,8 @@ TEST_CASE("Semantic analyzer rejects duplicate Main subroutines", "[semantic]")
 TEST_CASE("Semantic analyzer rejects Main parameters and return type", "[semantic]")
 {
     NodeList<Parameter> parameters{
-        node<Parameter>("value", nullptr, TypeName::Real, false, 1)};
-    const auto result = analyze({subroutine("Main", std::move(parameters), TypeName::Real)});
+        test::scalarDeclaration<Parameter>("value", ScalarType::Name::Real, 1)};
+    const auto result = analyze({subroutine("Main", std::move(parameters), ScalarType::Name::Real)});
 
     CHECK_FALSE(result.valid);
     CHECK(result.errors.size() == 2);
@@ -115,8 +119,9 @@ TEST_CASE("Semantic analyzer declares subroutine signatures", "[semantic]")
 {
     auto main = subroutine("Main");
     NodeList<Parameter> parameters{
-        node<Parameter>("items", nullptr, TypeName::Text, true, 2)};
+        test::arrayDeclaration<Parameter>("items", nullptr, ScalarType::Name::Text, 2)};
     auto printItems = subroutine("PrintItems", std::move(parameters), std::nullopt, 2);
+    const auto mainId = main->id();
     const auto printItemsId = printItems->id();
     auto program = node<Program>(
         NodeList<Subroutine>{std::move(main), std::move(printItems)}, 1);
@@ -126,13 +131,16 @@ TEST_CASE("Semantic analyzer declares subroutine signatures", "[semantic]")
     SemanticAnalyzer analyzer{symbols, model, diagnostics};
 
     REQUIRE(analyzer.analyze(*program));
+    CHECK(model.entryPoint() == model.symbol(mainId));
     const auto id = model.symbol(printItemsId);
     REQUIRE(id.has_value());
     const auto& symbol = symbols.symbol(*id);
     REQUIRE(symbol.subroutine.has_value());
     REQUIRE(symbol.subroutine->parameters.size() == 1);
-    CHECK(symbol.subroutine->parameters[0].type == TypeName::Text);
-    CHECK(symbol.subroutine->parameters[0].isArray);
+    const auto* parameterType = symbol.subroutine->parameters[0];
+    REQUIRE(parameterType != nullptr);
+    CHECK(parameterType->kind == NodeKind::ArrayType);
+    CHECK(static_cast<const ArrayType&>(*parameterType)._base->_name == ScalarType::Name::Text);
 }
 
 TEST_CASE("Semantic analyzer rejects duplicate subroutine names", "[semantic]")
@@ -162,20 +170,9 @@ TEST_CASE("Semantic analyzer reserves builtin subroutine names", "[semantic]")
     }
 }
 
-TEST_CASE("Semantic analyzer rejects unknown signature types", "[semantic]")
-{
-    NodeList<Parameter> parameters{
-        node<Parameter>("value", nullptr, TypeName::Unknown, false, 3)};
-    const auto result = analyze({subroutine("Main"),
-        subroutine("Broken", std::move(parameters), TypeName::Unknown, 3)});
-
-    CHECK_FALSE(result.valid);
-    CHECK(result.errors.size() == 2);
-}
-
 TEST_CASE("Semantic analyzer binds local declarations and uses", "[semantic]")
 {
-    auto declaration = node<Dim>("value", nullptr, TypeName::Real, false, 2);
+    auto declaration = test::scalarDeclaration("value", ScalarType::Name::Real, 2);
     const auto declarationId = declaration->id();
     auto target = node<Variable>("value", 3);
     const auto targetId = target->id();
@@ -209,8 +206,8 @@ TEST_CASE("Semantic analyzer rejects an undefined variable", "[semantic]")
 
 TEST_CASE("Semantic analyzer rejects duplicate names across nested blocks", "[semantic]")
 {
-    auto outer = node<Dim>("value", nullptr, TypeName::Real, false, 2);
-    auto inner = node<Dim>("value", nullptr, TypeName::Text, false, 4);
+    auto outer = test::scalarDeclaration("value", ScalarType::Name::Real, 2);
+    auto inner = test::scalarDeclaration("value", ScalarType::Name::Text, 4);
     auto branch = node<IfBranch>(node<Boolean>(true, 3),
         node<Sequence>(NodeList<Statement>{std::move(inner)}, 3), 3);
     auto conditional = node<If>(NodeList<IfBranch>{std::move(branch)}, nullptr, 3);
@@ -225,11 +222,11 @@ TEST_CASE("Semantic analyzer rejects duplicate names across nested blocks", "[se
 TEST_CASE("A parameter may have the function name", "[semantic]")
 {
     NodeList<Parameter> parameters{
-        node<Parameter>("Value", nullptr, TypeName::Real, false, 2)};
+        test::scalarDeclaration<Parameter>("Value", ScalarType::Name::Real, 2)};
     auto returnStatement = node<Return>(node<Variable>("Value", 3), 3);
     const auto result = analyze({subroutine("Main"),
         subroutineWithBody("Value", {std::move(returnStatement)},
-            std::move(parameters), TypeName::Real, 2)});
+            std::move(parameters), ScalarType::Name::Real, 2)});
 
     CHECK(result.valid);
     CHECK(result.errors.empty());
@@ -241,7 +238,7 @@ TEST_CASE("A function name is not an implicit return variable", "[semantic]")
         node<Number>(1.0, 3), 3);
     const auto result = analyze({subroutine("Main"),
         subroutineWithBody("Value", {std::move(assignment)}, {},
-            TypeName::Real, 2)});
+            ScalarType::Name::Real, 2)});
 
     CHECK_FALSE(result.valid);
     CHECK(result.errors.size() == 2);
@@ -249,7 +246,7 @@ TEST_CASE("A function name is not an implicit return variable", "[semantic]")
 
 TEST_CASE("Implicit FOR variable is visible in the whole subroutine", "[semantic]")
 {
-    auto declaration = node<Dim>("result", nullptr, TypeName::Real, false, 2);
+    auto declaration = test::scalarDeclaration("result", ScalarType::Name::Real, 2);
     auto use = node<Variable>("index", 3);
     const auto useId = use->id();
     auto assignment = node<Let>(
@@ -276,7 +273,7 @@ TEST_CASE("Implicit FOR variable is visible in the whole subroutine", "[semantic
 
 TEST_CASE("FOR reuses only a scalar REAL variable", "[semantic]")
 {
-    auto declaration = node<Dim>("index", nullptr, TypeName::Text, false, 2);
+    auto declaration = test::scalarDeclaration("index", ScalarType::Name::Text, 2);
     auto loop = node<For>(node<Variable>("index", 3), node<Number>(1.0, 3),
         node<Number>(3.0, 3), node<Number>(1.0, 3),
         node<Sequence>(NodeList<Statement>{}, 3), 3);
@@ -289,7 +286,7 @@ TEST_CASE("FOR reuses only a scalar REAL variable", "[semantic]")
 
 TEST_CASE("Semantic analyzer accepts a compatible scalar assignment", "[semantic]")
 {
-    auto declaration = node<Dim>("value", nullptr, TypeName::Real, false, 2);
+    auto declaration = test::scalarDeclaration("value", ScalarType::Name::Real, 2);
     auto number = node<Number>(42.0, 3);
     const auto numberId = number->id();
     auto assignment = node<Let>(
@@ -303,12 +300,49 @@ TEST_CASE("Semantic analyzer accepts a compatible scalar assignment", "[semantic
     SemanticAnalyzer analyzer{symbols, model, diagnostics};
 
     REQUIRE(analyzer.analyze(*program));
-    CHECK(model.type(numberId) == TypeName::Real);
+    REQUIRE(model.type(numberId) != nullptr);
+    CHECK(static_cast<const ScalarType&>(*model.type(numberId))._name == ScalarType::Name::Real);
+}
+
+TEST_CASE("Successful semantic analysis types every expression", "[semantic]")
+{
+    auto left = node<Number>(1.0, 3);
+    const auto leftId = left->id();
+    auto right = node<Number>(2.0, 3);
+    const auto rightId = right->id();
+    auto sum = node<Binary>(
+        Operation::Add, std::move(left), std::move(right), 3);
+    const auto sumId = sum->id();
+    auto limit = node<Number>(4.0, 3);
+    const auto limitId = limit->id();
+    auto comparison = node<Binary>(
+        Operation::Lt, std::move(sum), std::move(limit), 3);
+    const auto comparisonId = comparison->id();
+    auto negation = node<Unary>(Operation::Not, std::move(comparison), 3);
+    const auto negationId = negation->id();
+    auto target = node<Variable>("result", 3);
+    const auto targetId = target->id();
+    auto declaration = test::scalarDeclaration("result", ScalarType::Name::Bool, 2);
+    auto assignment = node<Let>(
+        std::move(target), nullptr, std::move(negation), 3);
+    auto main = subroutineWithBody(
+        "Main", {std::move(declaration), std::move(assignment)});
+    auto program = node<Program>(NodeList<Subroutine>{std::move(main)}, 1);
+    SymbolTable symbols;
+    SemanticModel model;
+    Diagnostics diagnostics;
+    SemanticAnalyzer analyzer{symbols, model, diagnostics};
+
+    REQUIRE(analyzer.analyze(*program));
+    const std::vector<NodeId> expressions{
+        leftId, rightId, sumId, limitId, comparisonId, negationId, targetId};
+    for( const auto expression : expressions )
+        CHECK(model.type(expression) != nullptr);
 }
 
 TEST_CASE("Semantic analyzer rejects an assignment type mismatch", "[semantic]")
 {
-    auto declaration = node<Dim>("value", nullptr, TypeName::Real, false, 2);
+    auto declaration = test::scalarDeclaration("value", ScalarType::Name::Real, 2);
     auto assignment = node<Let>(node<Variable>("value", 3), nullptr,
         node<Text>("wrong", 3), 3);
     const auto result = analyze({subroutineWithBody(
@@ -321,7 +355,7 @@ TEST_CASE("Semantic analyzer rejects an assignment type mismatch", "[semantic]")
 
 TEST_CASE("Semantic analyzer rejects indexing a scalar assignment target", "[semantic]")
 {
-    auto declaration = node<Dim>("value", nullptr, TypeName::Real, false, 2);
+    auto declaration = test::scalarDeclaration("value", ScalarType::Name::Real, 2);
     auto assignment = node<Let>(node<Variable>("value", 3), node<Number>(0.0, 3),
         node<Number>(1.0, 3), 3);
     const auto result = analyze({subroutineWithBody(
@@ -333,7 +367,8 @@ TEST_CASE("Semantic analyzer rejects indexing a scalar assignment target", "[sem
 
 TEST_CASE("Semantic analyzer rejects assigning a whole array", "[semantic]")
 {
-    auto array = node<Dim>("items", node<Number>(3.0, 2), TypeName::Real, true, 2);
+    auto array = test::arrayDeclaration(
+        "items", node<Number>(3.0, 2), ScalarType::Name::Real, 2);
     auto assignment = node<Let>(node<Variable>("items", 3), nullptr,
         node<Number>(1.0, 3), 3);
     const auto result = analyze({subroutineWithBody(
@@ -345,8 +380,9 @@ TEST_CASE("Semantic analyzer rejects assigning a whole array", "[semantic]")
 
 TEST_CASE("Semantic analyzer rejects an array as a scalar value", "[semantic]")
 {
-    auto array = node<Dim>("items", node<Number>(3.0, 2), TypeName::Real, true, 2);
-    auto scalar = node<Dim>("value", nullptr, TypeName::Real, false, 3);
+    auto array = test::arrayDeclaration(
+        "items", node<Number>(3.0, 2), ScalarType::Name::Real, 2);
+    auto scalar = test::scalarDeclaration("value", ScalarType::Name::Real, 3);
     auto assignment = node<Let>(node<Variable>("value", 4), nullptr,
         node<Variable>("items", 4), 4);
     const auto result = analyze({subroutineWithBody("Main",
@@ -362,9 +398,9 @@ TEST_CASE("RETURN uses the declared function return type", "[semantic]")
     auto invalidReturn = node<Return>(node<Text>("wrong", 6), 6);
     const auto result = analyze({subroutine("Main"),
         subroutineWithBody(
-            "Value", {std::move(validReturn)}, {}, TypeName::Real, 2),
+            "Value", {std::move(validReturn)}, {}, ScalarType::Name::Real, 2),
         subroutineWithBody(
-            "Broken", {std::move(invalidReturn)}, {}, TypeName::Real, 5)});
+            "Broken", {std::move(invalidReturn)}, {}, ScalarType::Name::Real, 5)});
 
     CHECK_FALSE(result.valid);
     REQUIRE(result.errors.size() == 1);
@@ -385,11 +421,11 @@ TEST_CASE("RETURN is accepted only in a function", "[semantic]")
 TEST_CASE("RETURN requires a scalar value", "[semantic]")
 {
     NodeList<Parameter> parameters{
-        node<Parameter>("items", nullptr, TypeName::Real, true, 2)};
+        test::arrayDeclaration<Parameter>("items", nullptr, ScalarType::Name::Real, 2)};
     auto returnStatement = node<Return>(node<Variable>("items", 3), 3);
     const auto result = analyze({subroutine("Main"),
         subroutineWithBody("First", {std::move(returnStatement)},
-            std::move(parameters), TypeName::Real, 2)});
+            std::move(parameters), ScalarType::Name::Real, 2)});
 
     CHECK_FALSE(result.valid);
     CHECK(result.errors.size() == 1);
@@ -400,7 +436,7 @@ TEST_CASE("A function must return on every execution path", "[semantic]")
     SECTION("missing RETURN")
     {
         const auto result = analyze({subroutine("Main"),
-            subroutineWithBody("Value", {}, {}, TypeName::Real, 2)});
+            subroutineWithBody("Value", {}, {}, ScalarType::Name::Real, 2)});
 
         CHECK_FALSE(result.valid);
         REQUIRE(result.errors.size() == 1);
@@ -419,7 +455,7 @@ TEST_CASE("A function must return on every execution path", "[semantic]")
             std::move(alternative), 3);
         const auto result = analyze({subroutine("Main"),
             subroutineWithBody("Value", {std::move(conditional)}, {},
-                TypeName::Real, 2)});
+                ScalarType::Name::Real, 2)});
 
         CHECK(result.valid);
         CHECK(result.errors.empty());
@@ -434,7 +470,7 @@ TEST_CASE("A function must return on every execution path", "[semantic]")
             NodeList<IfBranch>{std::move(branch)}, nullptr, 3);
         const auto result = analyze({subroutine("Main"),
             subroutineWithBody("Value", {std::move(conditional)}, {},
-                TypeName::Real, 2)});
+                ScalarType::Name::Real, 2)});
 
         CHECK_FALSE(result.valid);
         CHECK(result.errors.size() == 1);
@@ -443,7 +479,7 @@ TEST_CASE("A function must return on every execution path", "[semantic]")
 
 TEST_CASE("Assignment checks an inferred expression result type", "[semantic]")
 {
-    auto declaration = node<Dim>("value", nullptr, TypeName::Real, false, 2);
+    auto declaration = test::scalarDeclaration("value", ScalarType::Name::Real, 2);
     auto expression = node<Binary>(Operation::Conc, node<Text>("a", 3),
         node<Text>("b", 3), 3);
     auto assignment = node<Let>(node<Variable>("value", 3), nullptr,
@@ -464,7 +500,7 @@ TEST_CASE("Semantic analyzer accepts well-typed operators", "[semantic]")
             std::move(negation), 2);
         auto expression = node<Binary>(Operation::Or, std::move(conjunction),
             node<Boolean>(false, 2), 2);
-        CHECK(analyzeExpression(std::move(expression), TypeName::Bool).valid);
+        CHECK(analyzeExpression(std::move(expression), ScalarType::Name::Bool).valid);
     }
 
     SECTION("numeric operators")
@@ -473,14 +509,14 @@ TEST_CASE("Semantic analyzer accepts well-typed operators", "[semantic]")
             node<Number>(3.0, 2), 2);
         auto expression = node<Binary>(Operation::Add, node<Number>(1.0, 2),
             std::move(product), 2);
-        CHECK(analyzeExpression(std::move(expression), TypeName::Real).valid);
+        CHECK(analyzeExpression(std::move(expression), ScalarType::Name::Real).valid);
     }
 
     SECTION("text comparison")
     {
         auto expression = node<Binary>(Operation::Lt, node<Text>("a", 2),
             node<Text>("b", 2), 2);
-        CHECK(analyzeExpression(std::move(expression), TypeName::Bool).valid);
+        CHECK(analyzeExpression(std::move(expression), ScalarType::Name::Bool).valid);
     }
 }
 
@@ -489,7 +525,7 @@ TEST_CASE("Semantic analyzer rejects invalid unary operands", "[semantic]")
     SECTION("NOT requires BOOL")
     {
         auto expression = node<Unary>(Operation::Not, node<Number>(1.0, 2), 2);
-        const auto result = analyzeExpression(std::move(expression), TypeName::Bool);
+        const auto result = analyzeExpression(std::move(expression), ScalarType::Name::Bool);
         CHECK_FALSE(result.valid);
         REQUIRE(result.errors.size() == 1);
         CHECK(std::get<1>(result.errors.front()) == "'NOT' գործողության օպերանդը պետք է լինի BOOL, բայց ստացվել է REAL։");
@@ -498,18 +534,18 @@ TEST_CASE("Semantic analyzer rejects invalid unary operands", "[semantic]")
     SECTION("unary minus requires REAL")
     {
         auto expression = node<Unary>(Operation::Sub, node<Text>("text", 2), 2);
-        const auto result = analyzeExpression(std::move(expression), TypeName::Real);
+        const auto result = analyzeExpression(std::move(expression), ScalarType::Name::Real);
         CHECK_FALSE(result.valid);
         REQUIRE(result.errors.size() == 1);
         CHECK(std::get<1>(result.errors.front()) == "Ունար '-' գործողության օպերանդը պետք է լինի REAL, բայց ստացվել է TEXT։");
     }
 }
 
-TEST_CASE("Semantic analyzer suppresses a unary type error for an unknown operand", "[semantic]")
+TEST_CASE("Semantic analyzer suppresses a unary type error for an unresolved operand", "[semantic]")
 {
     auto operand = node<Variable>("missing", 2);
     auto expression = node<Unary>(Operation::Not, std::move(operand), 2);
-    const auto result = analyzeExpression(std::move(expression), TypeName::Bool);
+    const auto result = analyzeExpression(std::move(expression), ScalarType::Name::Bool);
 
     CHECK_FALSE(result.valid);
     REQUIRE(result.errors.size() == 1);
@@ -522,7 +558,7 @@ TEST_CASE("Semantic analyzer rejects invalid binary operands", "[semantic]")
     {
         auto expression = node<Binary>(Operation::Add, node<Text>("text", 2),
             node<Number>(1.0, 2), 2);
-        const auto result = analyzeExpression(std::move(expression), TypeName::Real);
+        const auto result = analyzeExpression(std::move(expression), ScalarType::Name::Real);
         CHECK_FALSE(result.valid);
         REQUIRE(result.errors.size() == 1);
         CHECK(std::get<1>(result.errors.front()) == "'+' գործողության ձախ օպերանդը պետք է լինի REAL, բայց ստացվել է TEXT։");
@@ -532,7 +568,7 @@ TEST_CASE("Semantic analyzer rejects invalid binary operands", "[semantic]")
     {
         auto expression = node<Binary>(Operation::Conc, node<Text>("text", 2),
             node<Number>(1.0, 2), 2);
-        const auto result = analyzeExpression(std::move(expression), TypeName::Text);
+        const auto result = analyzeExpression(std::move(expression), ScalarType::Name::Text);
         CHECK_FALSE(result.valid);
         CHECK(result.errors.size() == 1);
     }
@@ -541,7 +577,7 @@ TEST_CASE("Semantic analyzer rejects invalid binary operands", "[semantic]")
     {
         auto expression = node<Binary>(Operation::And, node<Boolean>(true, 2),
             node<Number>(1.0, 2), 2);
-        const auto result = analyzeExpression(std::move(expression), TypeName::Bool);
+        const auto result = analyzeExpression(std::move(expression), ScalarType::Name::Bool);
         CHECK_FALSE(result.valid);
         CHECK(result.errors.size() == 1);
     }
@@ -550,7 +586,7 @@ TEST_CASE("Semantic analyzer rejects invalid binary operands", "[semantic]")
     {
         auto expression = node<Binary>(Operation::Eq, node<Number>(1.0, 2),
             node<Text>("1", 2), 2);
-        const auto result = analyzeExpression(std::move(expression), TypeName::Bool);
+        const auto result = analyzeExpression(std::move(expression), ScalarType::Name::Bool);
         CHECK_FALSE(result.valid);
         CHECK(result.errors.size() == 1);
     }
@@ -559,7 +595,7 @@ TEST_CASE("Semantic analyzer rejects invalid binary operands", "[semantic]")
     {
         auto expression = node<Binary>(Operation::Lt, node<Boolean>(false, 2),
             node<Boolean>(true, 2), 2);
-        const auto result = analyzeExpression(std::move(expression), TypeName::Bool);
+        const auto result = analyzeExpression(std::move(expression), ScalarType::Name::Bool);
         CHECK_FALSE(result.valid);
         CHECK(result.errors.size() == 1);
     }
@@ -567,8 +603,9 @@ TEST_CASE("Semantic analyzer rejects invalid binary operands", "[semantic]")
 
 TEST_CASE("Semantic analyzer rejects arrays in scalar operators", "[semantic]")
 {
-    auto array = node<Dim>("items", node<Number>(3.0, 1), TypeName::Real, true, 1);
-    auto result = node<Dim>("result", nullptr, TypeName::Real, false, 1);
+    auto array = test::arrayDeclaration(
+        "items", node<Number>(3.0, 1), ScalarType::Name::Real, 1);
+    auto result = test::scalarDeclaration("result", ScalarType::Name::Real, 1);
     auto expression = node<Binary>(Operation::Add, node<Variable>("items", 2),
         node<Number>(1.0, 2), 2);
     auto assignment = node<Let>(node<Variable>("result", 2), nullptr,
@@ -637,7 +674,8 @@ TEST_CASE("Semantic analyzer checks FOR bounds and step", "[semantic]")
 
 TEST_CASE("Semantic analyzer rejects an array as a condition", "[semantic]")
 {
-    auto array = node<Dim>("flags", node<Number>(2.0, 1), TypeName::Bool, true, 1);
+    auto array = test::arrayDeclaration(
+        "flags", node<Number>(2.0, 1), ScalarType::Name::Bool, 1);
     auto branch = node<IfBranch>(node<Variable>("flags", 2),
         node<Sequence>(NodeList<Statement>{}, 2), 2);
     auto conditional = node<If>(NodeList<IfBranch>{std::move(branch)}, nullptr, 2);
@@ -654,16 +692,18 @@ TEST_CASE("Semantic analyzer accepts valid array sizes", "[semantic]")
     {
         auto size = node<Binary>(Operation::Add, node<Number>(2.0, 1),
             node<Number>(3.0, 1), 1);
-        auto array = node<Dim>("items", std::move(size), TypeName::Real, true, 1);
+        auto array = test::arrayDeclaration(
+            "items", std::move(size), ScalarType::Name::Real, 1);
         const auto result = analyze({subroutineWithBody("Main", {std::move(array)})});
         CHECK(result.valid);
     }
 
     SECTION("dynamic expression")
     {
-        auto length = node<Dim>("length", nullptr, TypeName::Real, false, 1);
+        auto length = test::scalarDeclaration("length", ScalarType::Name::Real, 1);
         auto size = node<Variable>("length", 2);
-        auto array = node<Dim>("items", std::move(size), TypeName::Real, true, 2);
+        auto array = test::arrayDeclaration(
+            "items", std::move(size), ScalarType::Name::Real, 2);
         const auto result = analyze({subroutineWithBody(
             "Main", {std::move(length), std::move(array)})});
         CHECK(result.valid);
@@ -675,7 +715,8 @@ TEST_CASE("Semantic analyzer requires a scalar REAL array size", "[semantic]")
     SECTION("wrong type")
     {
         auto size = node<Text>("large", 1);
-        auto array = node<Dim>("items", std::move(size), TypeName::Real, true, 1);
+        auto array = test::arrayDeclaration(
+            "items", std::move(size), ScalarType::Name::Real, 1);
         const auto result = analyze({subroutineWithBody("Main", {std::move(array)})});
         CHECK_FALSE(result.valid);
         REQUIRE(result.errors.size() == 1);
@@ -684,10 +725,11 @@ TEST_CASE("Semantic analyzer requires a scalar REAL array size", "[semantic]")
 
     SECTION("array value")
     {
-        auto sizes = node<Dim>("sizes", node<Number>(2.0, 1),
-            TypeName::Real, true, 1);
+        auto sizes = test::arrayDeclaration(
+            "sizes", node<Number>(2.0, 1), ScalarType::Name::Real, 1);
         auto size = node<Variable>("sizes", 2);
-        auto items = node<Dim>("items", std::move(size), TypeName::Real, true, 2);
+        auto items = test::arrayDeclaration(
+            "items", std::move(size), ScalarType::Name::Real, 2);
         const auto result = analyze({subroutineWithBody(
             "Main", {std::move(sizes), std::move(items)})});
         CHECK_FALSE(result.valid);
@@ -708,7 +750,8 @@ TEST_CASE("Semantic analyzer validates constant array sizes", "[semantic]")
         else {
             size = node<Unary>(Operation::Sub, node<Number>(1.0, 1), 1);
         }
-        auto array = node<Dim>("items", std::move(size), TypeName::Real, true, 1);
+        auto array = test::arrayDeclaration(
+            "items", std::move(size), ScalarType::Name::Real, 1);
         const auto result = analyze({subroutineWithBody("Main", {std::move(array)})});
         CHECK_FALSE(result.valid);
         CHECK(result.errors.size() == 1);
@@ -717,7 +760,7 @@ TEST_CASE("Semantic analyzer validates constant array sizes", "[semantic]")
 
 TEST_CASE("Semantic analyzer requires a local array size", "[semantic]")
 {
-    auto array = node<Dim>("items", nullptr, TypeName::Real, true, 1);
+    auto array = test::arrayDeclaration("items", nullptr, ScalarType::Name::Real, 1);
     const auto result = analyze({subroutineWithBody("Main", {std::move(array)})});
 
     CHECK_FALSE(result.valid);
@@ -726,9 +769,9 @@ TEST_CASE("Semantic analyzer requires a local array size", "[semantic]")
 
 TEST_CASE("Array access has the array element type", "[semantic]")
 {
-    auto array = node<Dim>("items", node<Number>(3.0, 1),
-        TypeName::Text, true, 1);
-    auto scalar = node<Dim>("value", nullptr, TypeName::Text, false, 2);
+    auto array = test::arrayDeclaration(
+        "items", node<Number>(3.0, 1), ScalarType::Name::Text, 1);
+    auto scalar = test::scalarDeclaration("value", ScalarType::Name::Text, 2);
     auto access = node<Binary>(Operation::Index, node<Variable>("items", 3),
         node<Number>(0.0, 3), 3);
     const auto accessId = access->id();
@@ -743,13 +786,14 @@ TEST_CASE("Array access has the array element type", "[semantic]")
     SemanticAnalyzer analyzer{symbols, model, diagnostics};
 
     REQUIRE(analyzer.analyze(*program));
-    CHECK(model.type(accessId) == TypeName::Text);
+    REQUIRE(model.type(accessId) != nullptr);
+    CHECK(static_cast<const ScalarType&>(*model.type(accessId))._name == ScalarType::Name::Text);
 }
 
 TEST_CASE("Semantic analyzer rejects indexing a scalar expression", "[semantic]")
 {
-    auto scalar = node<Dim>("value", nullptr, TypeName::Real, false, 1);
-    auto result = node<Dim>("result", nullptr, TypeName::Real, false, 1);
+    auto scalar = test::scalarDeclaration("value", ScalarType::Name::Real, 1);
+    auto result = test::scalarDeclaration("result", ScalarType::Name::Real, 1);
     auto access = node<Binary>(Operation::Index, node<Variable>("value", 2),
         node<Number>(0.0, 2), 2);
     auto assignment = node<Let>(node<Variable>("result", 2), nullptr,
@@ -763,8 +807,8 @@ TEST_CASE("Semantic analyzer rejects indexing a scalar expression", "[semantic]"
 
 TEST_CASE("Semantic analyzer requires a scalar REAL index", "[semantic]")
 {
-    auto array = node<Dim>("items", node<Number>(3.0, 1),
-        TypeName::Real, true, 1);
+    auto array = test::arrayDeclaration(
+        "items", node<Number>(3.0, 1), ScalarType::Name::Real, 1);
     auto index = node<Text>("first", 2);
     auto assignment = node<Let>(node<Variable>("items", 2), std::move(index),
         node<Number>(1.0, 2), 2);
@@ -779,21 +823,21 @@ TEST_CASE("Semantic analyzer requires a scalar REAL index", "[semantic]")
 TEST_CASE("Semantic analyzer binds valid procedure and function calls", "[semantic]")
 {
     NodeList<Parameter> printParameters{
-        node<Parameter>("message", nullptr, TypeName::Text, false, 5)};
+        test::scalarDeclaration<Parameter>("message", ScalarType::Name::Text, 5)};
     auto printMessage = subroutine("PrintMessage", std::move(printParameters),
         std::nullopt, 5);
     const auto printMessageId = printMessage->id();
 
     NodeList<Parameter> doubleParameters{
-        node<Parameter>("value", nullptr, TypeName::Real, false, 8)};
+        test::scalarDeclaration<Parameter>("value", ScalarType::Name::Real, 8)};
     auto doubleValue = subroutine("Double", std::move(doubleParameters),
-        TypeName::Real, 8);
+        ScalarType::Name::Real, 8);
     const auto doubleValueId = doubleValue->id();
 
     auto call = node<Call>("PrintMessage",
         NodeList<Expression>{node<Text>("hello", 2)}, 2);
     const auto callId = call->id();
-    auto result = node<Dim>("result", nullptr, TypeName::Real, false, 3);
+    auto result = test::scalarDeclaration("result", ScalarType::Name::Real, 3);
     auto apply = node<Apply>("Double",
         NodeList<Expression>{node<Number>(2.0, 4)}, 4);
     const auto applyId = apply->id();
@@ -813,7 +857,8 @@ TEST_CASE("Semantic analyzer binds valid procedure and function calls", "[semant
     REQUIRE(analyzer.analyze(*program));
     CHECK(model.symbol(callId) == model.symbol(printMessageId));
     CHECK(model.symbol(applyId) == model.symbol(doubleValueId));
-    CHECK(model.type(applyId) == TypeName::Real);
+    REQUIRE(model.type(applyId) != nullptr);
+    CHECK(static_cast<const ScalarType&>(*model.type(applyId))._name == ScalarType::Name::Real);
 }
 
 TEST_CASE("Semantic analyzer requires a declared call target", "[semantic]")
@@ -829,7 +874,7 @@ TEST_CASE("CALL accepts only procedures", "[semantic]")
 {
     auto call = node<Call>("Value", NodeList<Expression>{}, 2);
     const auto result = analyze({subroutineWithBody("Main", {std::move(call)}),
-        subroutine("Value", {}, TypeName::Real, 4)});
+        subroutine("Value", {}, ScalarType::Name::Real, 4)});
 
     CHECK_FALSE(result.valid);
     CHECK(result.errors.size() == 1);
@@ -837,7 +882,7 @@ TEST_CASE("CALL accepts only procedures", "[semantic]")
 
 TEST_CASE("Function application accepts only functions", "[semantic]")
 {
-    auto declaration = node<Dim>("result", nullptr, TypeName::Real, false, 2);
+    auto declaration = test::scalarDeclaration("result", ScalarType::Name::Real, 2);
     auto apply = node<Apply>("Work", NodeList<Expression>{}, 3);
     auto assignment = node<Let>(node<Variable>("result", 3), nullptr,
         std::move(apply), 3);
@@ -853,8 +898,8 @@ TEST_CASE("Function application accepts only functions", "[semantic]")
 TEST_CASE("Semantic analyzer checks call argument count", "[semantic]")
 {
     NodeList<Parameter> parameters{
-        node<Parameter>("first", nullptr, TypeName::Real, false, 4),
-        node<Parameter>("second", nullptr, TypeName::Real, false, 4)};
+        test::scalarDeclaration<Parameter>("first", ScalarType::Name::Real, 4),
+        test::scalarDeclaration<Parameter>("second", ScalarType::Name::Real, 4)};
     auto call = node<Call>("Add",
         NodeList<Expression>{node<Number>(1.0, 2)}, 2);
     const auto result = analyze({subroutineWithBody("Main", {std::move(call)}),
@@ -867,7 +912,7 @@ TEST_CASE("Semantic analyzer checks call argument count", "[semantic]")
 TEST_CASE("Semantic analyzer checks scalar argument types", "[semantic]")
 {
     NodeList<Parameter> parameters{
-        node<Parameter>("value", nullptr, TypeName::Real, false, 4)};
+        test::scalarDeclaration<Parameter>("value", ScalarType::Name::Real, 4)};
     auto call = node<Call>("UseNumber",
         NodeList<Expression>{node<Text>("wrong", 2)}, 2);
     const auto result = analyze({subroutineWithBody("Main", {std::move(call)}),
@@ -883,8 +928,9 @@ TEST_CASE("Semantic analyzer checks argument shapes", "[semantic]")
     SECTION("array parameter requires an array")
     {
         NodeList<Parameter> parameters{
-            node<Parameter>("items", nullptr, TypeName::Real, true, 5)};
-        auto value = node<Dim>("value", nullptr, TypeName::Real, false, 2);
+            test::arrayDeclaration<Parameter>(
+                "items", nullptr, ScalarType::Name::Real, 5)};
+        auto value = test::scalarDeclaration("value", ScalarType::Name::Real, 2);
         auto call = node<Call>("UseItems",
             NodeList<Expression>{node<Variable>("value", 3)}, 3);
         const auto result = analyze({subroutineWithBody(
@@ -898,9 +944,9 @@ TEST_CASE("Semantic analyzer checks argument shapes", "[semantic]")
     SECTION("scalar parameter rejects an array")
     {
         NodeList<Parameter> parameters{
-            node<Parameter>("value", nullptr, TypeName::Real, false, 5)};
-        auto items = node<Dim>("items", node<Number>(3.0, 2),
-            TypeName::Real, true, 2);
+            test::scalarDeclaration<Parameter>("value", ScalarType::Name::Real, 5)};
+        auto items = test::arrayDeclaration(
+            "items", node<Number>(3.0, 2), ScalarType::Name::Real, 2);
         auto call = node<Call>("UseValue",
             NodeList<Expression>{node<Variable>("items", 3)}, 3);
         const auto result = analyze({subroutineWithBody(
@@ -915,9 +961,10 @@ TEST_CASE("Semantic analyzer checks argument shapes", "[semantic]")
 TEST_CASE("Semantic analyzer checks array argument element types", "[semantic]")
 {
     NodeList<Parameter> parameters{
-        node<Parameter>("items", nullptr, TypeName::Real, true, 5)};
-    auto items = node<Dim>("items", node<Number>(3.0, 2),
-        TypeName::Text, true, 2);
+        test::arrayDeclaration<Parameter>(
+            "items", nullptr, ScalarType::Name::Real, 5)};
+    auto items = test::arrayDeclaration(
+        "items", node<Number>(3.0, 2), ScalarType::Name::Text, 2);
     auto call = node<Call>("UseItems",
         NodeList<Expression>{node<Variable>("items", 3)}, 3);
     const auto result = analyze({subroutineWithBody(
@@ -932,12 +979,12 @@ TEST_CASE("Semantic analyzer accepts builtin subroutine signatures", "[semantic]
 {
     SECTION("Print accepts every scalar type")
     {
-        for( const auto type : {TypeName::Bool, TypeName::Real, TypeName::Text} ) {
+        for( const auto type : {ScalarType::Name::Bool, ScalarType::Name::Real, ScalarType::Name::Text} ) {
             Expression::Ptr argument;
-            if( type == TypeName::Bool ) {
+            if( type == ScalarType::Name::Bool ) {
                 argument = node<Boolean>(true, 2);
             }
-            else if( type == TypeName::Real ) {
+            else if( type == ScalarType::Name::Real ) {
                 argument = node<Number>(1.0, 2);
             }
             else {
@@ -955,7 +1002,7 @@ TEST_CASE("Semantic analyzer accepts builtin subroutine signatures", "[semantic]
         auto input = node<Apply>("Input", NodeList<Expression>{}, 2);
         auto number = node<Apply>("NUM",
             NodeList<Expression>{std::move(input)}, 2);
-        const auto result = analyzeExpression(std::move(number), TypeName::Real);
+        const auto result = analyzeExpression(std::move(number), ScalarType::Name::Real);
         CHECK(result.valid);
     }
 }
@@ -972,8 +1019,8 @@ TEST_CASE("Semantic analyzer rejects calls that violate builtin signatures", "[s
 
     SECTION("scalar shape")
     {
-        auto items = node<Dim>("items", node<Number>(2.0, 2),
-            TypeName::Text, true, 2);
+        auto items = test::arrayDeclaration(
+            "items", node<Number>(2.0, 2), ScalarType::Name::Text, 2);
         auto call = node<Call>("Print",
             NodeList<Expression>{node<Variable>("items", 3)}, 3);
         const auto result = analyze({subroutineWithBody(
@@ -986,7 +1033,7 @@ TEST_CASE("Semantic analyzer rejects calls that violate builtin signatures", "[s
     {
         auto number = node<Apply>("NUM",
             NodeList<Expression>{node<Number>(1.0, 2)}, 2);
-        const auto result = analyzeExpression(std::move(number), TypeName::Real);
+        const auto result = analyzeExpression(std::move(number), ScalarType::Name::Real);
         CHECK_FALSE(result.valid);
         CHECK(result.errors.size() == 1);
     }
@@ -1003,8 +1050,10 @@ TEST_CASE("Semantic analyzer rejects calls that violate builtin signatures", "[s
 TEST_CASE("Signature checker supports additional builtin subroutines", "[semantic]")
 {
     SymbolTable symbols;
+    ScalarType textType{ScalarType::Name::Text, 0};
+    ScalarType boolType{ScalarType::Name::Bool, 0};
     const auto builtin = symbols.declareSubroutine(
-        {"IsEmpty", {{TypeName::Text, false}}, TypeName::Bool, true});
+        {"IsEmpty", {&textType}, &boolType, true});
     SemanticModel model;
     Diagnostics diagnostics;
     SemanticAnalyzer analyzer{symbols, model, diagnostics};
@@ -1012,7 +1061,7 @@ TEST_CASE("Signature checker supports additional builtin subroutines", "[semanti
     auto apply = node<Apply>("IsEmpty",
         NodeList<Expression>{node<Text>("", 2)}, 2);
     const auto applyId = apply->id();
-    auto result = node<Dim>("result", nullptr, TypeName::Bool, false, 2);
+    auto result = test::scalarDeclaration("result", ScalarType::Name::Bool, 2);
     auto assignment = node<Let>(node<Variable>("result", 2), nullptr,
         std::move(apply), 2);
     auto main = subroutineWithBody(
@@ -1021,5 +1070,6 @@ TEST_CASE("Signature checker supports additional builtin subroutines", "[semanti
 
     REQUIRE(analyzer.analyze(*program));
     CHECK(model.symbol(applyId) == builtin);
-    CHECK(model.type(applyId) == TypeName::Bool);
+    REQUIRE(model.type(applyId) != nullptr);
+    CHECK(static_cast<const ScalarType&>(*model.type(applyId))._name == ScalarType::Name::Bool);
 }

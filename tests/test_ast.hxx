@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ast.hxx"
+
 #include <concepts>
 #include <memory>
 #include <utility>
@@ -28,5 +30,22 @@ public:
 private:
     std::vector<std::unique_ptr<Base>> _values;
 };
+
+template<typename Declaration = Dim>
+std::unique_ptr<Declaration> scalarDeclaration(
+    std::string_view name, ScalarType::Name type, Position line)
+{
+    auto declarationType = node<ScalarType>(type, line);
+    return node<Declaration>(name, std::move(declarationType), line);
+}
+
+template<typename Declaration = Dim>
+std::unique_ptr<Declaration> arrayDeclaration(std::string_view name,
+    Expression::Ptr size, ScalarType::Name type, Position line)
+{
+    auto base = node<ScalarType>(type, line);
+    auto declarationType = node<ArrayType>(std::move(base), std::move(size), line);
+    return node<Declaration>(name, std::move(declarationType), line);
+}
 
 } // namespace avium::test

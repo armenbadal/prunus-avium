@@ -107,7 +107,8 @@ Token singleCharacterToken(char value)
 
 } // namespace
 
-Scanner::Scanner(std::istream& source) : _source{source}
+Scanner::Scanner(std::istream& source)
+    : _source{source}
 {
     _source.unsetf(std::ios_base::skipws);
 }
