@@ -40,14 +40,13 @@ SymbolId SymbolTable::insert(Symbol symbol, Scope& scope)
     return id;
 }
 
-SymbolId SymbolTable::declareVariable(std::string name, TypeName type, bool isArray,
+SymbolId SymbolTable::declareVariable(std::string name, const Type& type,
     VariableStorage storage)
 {
     Symbol symbol{
         .kind = SymbolKind::Variable,
         .name = std::move(name),
-        .type = type,
-        .isArray = isArray,
+        .type = &type,
         .storage = storage,
         .subroutine = std::nullopt};
     return insert(std::move(symbol), _scopes.back());
@@ -58,8 +57,7 @@ SymbolId SymbolTable::declareSubroutine(SubroutineSignature signature)
     Symbol symbol{
         .kind = SymbolKind::Subroutine,
         .name = signature.name,
-        .type = signature.returnType.value_or(TypeName::Unknown),
-        .isArray = false,
+        .type = signature.returnType,
         .storage = signature.builtin ? VariableStorage::Builtin : VariableStorage::Local,
         .subroutine = std::move(signature)};
     return insert(std::move(symbol), _scopes.front());

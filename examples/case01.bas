@@ -6,14 +6,14 @@ SUB max(x AS REAL, y AS REAL) AS REAL
     LET t = 100
   END IF
 
-  IF x > y THEN
-    LET max = x
-  ELSE
-    LET max = y
-  END IF
-
   DIM sum AS REAL
   LET sum = x + y
+
+  IF x > y THEN
+    RETURN x
+  ELSE
+    RETURN y
+  END IF
 END SUB
 
 SUB Main

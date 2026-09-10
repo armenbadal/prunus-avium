@@ -1,4 +1,5 @@
 #include "parser.hxx"
+#include "formatters.hxx"
 
 #include <exception>
 #include <format>
@@ -10,14 +11,14 @@ namespace avium {
 namespace {
 
 const std::set<Token> firstStatement{Token::Let, Token::Dim, Token::If,
-    Token::While, Token::For, Token::Call};
+    Token::While, Token::For, Token::Call, Token::Return};
 const std::set<Token> firstExpression{Token::BoolLit, Token::RealLit,
     Token::TextLit, Token::Identifier, Token::Add, Token::Sub, Token::Not,
     Token::LeftPar};
 const std::set<Token> sequenceEnd{Token::End, Token::ElseIf, Token::Else,
     Token::Subroutine, Token::Eof};
 const std::set<Token> statementSync{Token::NewLine, Token::Let, Token::Dim,
-    Token::If, Token::While, Token::For, Token::Call, Token::End,
+    Token::If, Token::While, Token::For, Token::Call, Token::Return, Token::End,
     Token::ElseIf, Token::Else, Token::Subroutine, Token::Eof};
 const std::set<Token> subroutineSync{Token::Subroutine, Token::Eof};
 const std::set<Token> expressionSync{Token::BoolLit, Token::RealLit,
@@ -68,10 +69,25 @@ Operation operation(Token token)
     }
 }
 
+ScalarType::Name typeName(Token token)
+{
+    switch( token ) {
+        case Token::Bool:
+            return ScalarType::Name::Bool;
+        case Token::Real:
+            return ScalarType::Name::Real;
+        case Token::Text:
+            return ScalarType::Name::Text;
+        default:
+            std::unreachable();
+    }
+}
+
 } // namespace
 
 Parser::Parser(Scanner& scanner, Diagnostics& diagnostics)
-    : _scanner{scanner}, _diagnostics{diagnostics}
+    : _scanner{scanner}
+    , _diagnostics{diagnostics}
 {
 }
 
@@ -84,9 +100,7 @@ void Parser::advance()
 std::string Parser::match(Token expected)
 {
     if( !_lookahead.is(expected) ) {
-        _diagnostics.mark(_lookahead.line,
-            std::format("Սպասվում է '{}', բայց հանդիպել է {}։", toString(expected),
-                describe(_lookahead)));
+        _diagnostics.mark(_lookahead.line, std::format("Սպասվում է '{}', բայց հանդիպել է {}։", expected, _lookahead));
         return {};
     }
 
@@ -119,8 +133,7 @@ Program::Ptr Parser::parseProgram()
 
     std::vector<Subroutine::Ptr> subroutines;
     while( !_lookahead.is(Token::Eof) ) {
-        synchronize(subroutineSync,
-            std::format("Սպասվում է 'SUB', բայց հանդիպել է {}։", describe(_lookahead)));
+        synchronize(subroutineSync, std::format("Սպասվում է 'SUB', բայց հանդիպել է {}։", _lookahead));
         if( _lookahead.is(Token::Subroutine) )
             subroutines.push_back(parseSubroutine());
         parseNewLines();
@@ -139,35 +152,24 @@ Subroutine::Ptr Parser::parseSubroutine()
     if( _lookahead.is(Token::LeftPar) ) {
         match(Token::LeftPar);
         if( _lookahead.is(Token::Identifier) ) {
-            parameters.push_back(parseParameter());
+            if( auto parameter = parseParameter() )
+                parameters.push_back(std::move(parameter));
             while( _lookahead.is(Token::Comma) ) {
                 match(Token::Comma);
-                parameters.push_back(parseParameter());
+                if( auto parameter = parseParameter() )
+                    parameters.push_back(std::move(parameter));
             }
         }
         match(Token::RightPar);
     }
 
-    std::optional<TypeName> returnType;
-    if( _lookahead.is(Token::As) ) {
-        match(Token::As);
-        if( _lookahead.is(Token::Real, Token::Text, Token::Bool) ) {
-            const auto token = _lookahead.kind;
-            match(token);
-            returnType = token == Token::Real ? TypeName::Real
-                : token == Token::Text        ? TypeName::Text
-                                              : TypeName::Bool;
-        }
-        else {
-            _diagnostics.mark(_lookahead.line,
-                std::format("Սպասվում է տիպ (REAL | TEXT | BOOL), բայց հանդիպել է {}։",
-                    describe(_lookahead)));
-        }
-    }
+    ScalarType::Ptr returnType;
+    if( _lookahead.is(Token::As) )
+        returnType = parseType();
 
     auto body = parseSequence();
     parseBlockEnd(Token::Subroutine);
-    return node<Subroutine>(name, std::move(parameters), returnType, std::move(body), line);
+    return node<Subroutine>(name, std::move(parameters), std::move(returnType), std::move(body), line);
 }
 
 Parameter::Ptr Parser::parseParameter()
@@ -181,21 +183,30 @@ Parameter::Ptr Parser::parseParameter()
         isArray = true;
     }
 
+    auto base = parseType();
+    if( !base )
+        return {};
+
+    Type::Ptr parameterType;
+    if( isArray )
+        parameterType = node<ArrayType>(std::move(base), nullptr, line);
+    else
+        parameterType = std::move(base);
+    return node<Parameter>(name, std::move(parameterType), line);
+}
+
+ScalarType::Ptr Parser::parseType()
+{
     match(Token::As);
-    TypeName type = TypeName::Unknown;
-    if( _lookahead.is(Token::Real, Token::Text, Token::Bool) ) {
-        const auto token = _lookahead.kind;
-        match(token);
-        type = token == Token::Real ? TypeName::Real
-            : token == Token::Text  ? TypeName::Text
-                                    : TypeName::Bool;
+    if( !_lookahead.is(Token::Real, Token::Text, Token::Bool) ) {
+        _diagnostics.mark(_lookahead.line, std::format("Սպասվում է տիպ (REAL | TEXT | BOOL), բայց հանդիպել է {}։", _lookahead));
+        return nullptr;
     }
-    else {
-        _diagnostics.mark(_lookahead.line,
-            std::format("Սպասվում է տիպ (REAL | TEXT | BOOL), բայց հանդիպել է {}։",
-                describe(_lookahead)));
-    }
-    return node<Parameter>(name, nullptr, type, isArray, line);
+
+    const auto token = _lookahead.kind;
+    const auto line = _lookahead.line;
+    match(token);
+    return node<ScalarType>(typeName(token), line);
 }
 
 Sequence::Ptr Parser::parseSequence()
@@ -209,10 +220,10 @@ Sequence::Ptr Parser::parseSequence()
             parseNewLines();
             continue;
         }
-        synchronize(statementSync,
-            std::format("Սպասվում է հրաման, բայց հանդիպել է {}։", describe(_lookahead)));
+        synchronize(statementSync, std::format("Սպասվում է հրաման, բայց հանդիպել է {}։", _lookahead));
         if( firstStatement.contains(_lookahead.kind) ) {
-            statements.push_back(parseStatement());
+            if( auto statement = parseStatement() )
+                statements.push_back(std::move(statement));
             parseNewLines();
         }
     }
@@ -233,6 +244,8 @@ Statement::Ptr Parser::parseStatement()
         return parseFor();
     if( _lookahead.is(Token::Call) )
         return parseCall();
+    if( _lookahead.is(Token::Return) )
+        return parseReturn();
     return {};
 }
 
@@ -268,27 +281,21 @@ Dim::Ptr Parser::parseDeclaration(bool sizeRequired)
         if( firstExpression.contains(_lookahead.kind) )
             size = parseExpression();
         else if( sizeRequired )
-            _diagnostics.mark(_lookahead.line,
-                std::format("Սպասվում է չափը, բայց հանդիպել է {}։", describe(_lookahead)));
+            _diagnostics.mark(_lookahead.line, std::format("Սպասվում է չափը, բայց հանդիպել է {}։", _lookahead));
         match(Token::RightBrack);
         isArray = true;
     }
-    match(Token::As);
 
-    TypeName type = TypeName::Unknown;
-    if( _lookahead.is(Token::Real, Token::Text, Token::Bool) ) {
-        const auto token = _lookahead.kind;
-        match(token);
-        type = token == Token::Real ? TypeName::Real
-            : token == Token::Text  ? TypeName::Text
-                                    : TypeName::Bool;
-    }
-    else {
-        _diagnostics.mark(_lookahead.line,
-            std::format("Սպասվում է տիպ (REAL | TEXT | BOOL), բայց հանդիպել է {}։",
-                describe(_lookahead)));
-    }
-    return node<Dim>(name, std::move(size), type, isArray, line);
+    auto base = parseType();
+    if( !base )
+        return {};
+
+    Type::Ptr declarationType;
+    if( isArray )
+        declarationType = node<ArrayType>(std::move(base), std::move(size), line);
+    else
+        declarationType = std::move(base);
+    return node<Dim>(name, std::move(declarationType), line);
 }
 
 If::Ptr Parser::parseIf()
@@ -363,6 +370,13 @@ Call::Ptr Parser::parseCall()
     match(Token::Call);
     const auto name = match(Token::Identifier);
     return node<Call>(name, parseExpressionList(), line);
+}
+
+Return::Ptr Parser::parseReturn()
+{
+    const auto line = _lookahead.line;
+    match(Token::Return);
+    return node<Return>(parseExpression(), line);
 }
 
 std::vector<Expression::Ptr> Parser::parseExpressionList()
@@ -504,8 +518,7 @@ Expression::Ptr Parser::parseSubscript()
 Expression::Ptr Parser::parseFactor()
 {
     if( !firstExpression.contains(_lookahead.kind) ) {
-        _diagnostics.mark(_lookahead.line,
-            std::format("Սպասվում է արտահայտություն, բայց հանդիպել է {}։", describe(_lookahead)));
+        _diagnostics.mark(_lookahead.line, std::format("Սպասվում է արտահայտություն, բայց հանդիպել է {}։", _lookahead));
         while( !expressionSync.contains(_lookahead.kind) )
             advance();
         return node<Number>(0.0, _lookahead.line);
@@ -516,17 +529,22 @@ Expression::Ptr Parser::parseFactor()
         const auto value = match(Token::BoolLit);
         return node<Boolean>(value == "TRUE", line);
     }
+
     if( _lookahead.is(Token::RealLit) )
         return parseNumber();
+
     if( _lookahead.is(Token::TextLit) ) {
         const auto line = _lookahead.line;
         return node<Text>(match(Token::TextLit), line);
     }
+
     if( _lookahead.is(Token::Identifier) )
         return parseIdentifier();
+
     match(Token::LeftPar);
     auto result = parseExpression();
     match(Token::RightPar);
+
     return result;
 }
 
@@ -559,8 +577,7 @@ Expression::Ptr Parser::parseIdentifier()
 void Parser::parseNewLines()
 {
     if( !_lookahead.is(Token::NewLine, Token::Eof) )
-        _diagnostics.mark(_lookahead.line,
-            std::format("Սպասվում է տողի ավարտ, բայց հանդիպել է {}։", describe(_lookahead)));
+        _diagnostics.mark(_lookahead.line, std::format("Սպասվում է տողի ավարտ, բայց հանդիպել է {}։", _lookahead));
     while( _lookahead.is(Token::NewLine) )
         advance();
 }
@@ -568,9 +585,7 @@ void Parser::parseNewLines()
 void Parser::parseBlockEnd(Token keyword)
 {
     if( !_lookahead.is(Token::End) ) {
-        _diagnostics.mark(_lookahead.line,
-            std::format("Սպասվում է 'END {}', բայց հանդիպել է {}։", toString(keyword),
-                describe(_lookahead)));
+        _diagnostics.mark(_lookahead.line, std::format("Սպասվում է 'END {}', բայց հանդիպել է {}։", keyword, _lookahead));
         return;
     }
     advance();
