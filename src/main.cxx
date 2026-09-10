@@ -1,6 +1,7 @@
 #include "astlisp.hxx"
 #include "parser.hxx"
 #include "semantic.hxx"
+#include "codegensi.hxx"
 
 #include <cstdlib>
 #include <filesystem>
@@ -57,6 +58,10 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    avium::AstLisp{}.emit(*program, std::cout);
+    ///avium::AstLisp{}.emit(*program, std::cout);
+    avium::CodeGeneratorSi codegen;
+    codegen.generate(*program, symbols, model);
+    codegen.save("test-output.c");
+
     return EXIT_SUCCESS;
 }
