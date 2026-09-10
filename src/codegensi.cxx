@@ -1,28 +1,32 @@
 #include "codegensi.hxx"
 
+#include <format>
 #include <fstream>
 #include <string>
 
 namespace {
 
-std::string toSiType(Type& type)
+std::string temporatyName()
 {
-    if( auto& s = dynamic_cast<ScalarType&>(type) ) {
-        return [&s] {
-            switch( s._name ) {
-                case ScalarType::Name::Real:
-                    return "double";
-                case ScalarType::Name::Text:
-                    return "char*";
-                case ScalarType::Name::Bool:
-                    return "bool";
-            }
-        }();
+    static unsigned int index = 0;
+    return std::format("avium_temp_{}", ++index);
+}
+
+std::string toSiType(avium::ScalarType& type)
+{
+    switch( type._name ) {
+        case avium::ScalarType::Name::Real:
+            return "double";
+        case avium::ScalarType::Name::Text:
+            return "char*";
+        case avium::ScalarType::Name::Bool:
+            return "bool";
     }
-    else if( auto& a = dynamic_cast<ArrayType&>(type) ) {
-        auto b = toSiType(a._base);
-        
-    }
+}
+
+std::string toSiType(avium::ArrayType& type)
+{
+    return "array_descriptor*";
 }
 
 } // namespace
@@ -53,26 +57,30 @@ void CodeGeneratorSi::visit(Program& p)
         visit(*subroutine);
 }
 
+void CodeGeneratorSi::visit(Sequence& q)
+{
+    _out << "{\n";
+    for( auto& s : q._items )
+        visit(*s);
+    _out << "\n}\n";
+}
+
 void CodeGeneratorSi::visit(Subroutine& s)
 {
     std::string returnType{"void"};
-    if( s._returnType != nullptr ) {
-        returnType = [&] {
-            switch( s._returnType->_name ) {
-                case ScalarType::Name::Real:
-                    return "double";
-                case ScalarType::Name::Text:
-                    return "char*";
-                case ScalarType::Name::Bool:
-                    return "bool";
-            }
-        }();
-    }
+    if( s._returnType != nullptr )
+        returnType = toSiType(*s._returnType);
 
     _out << returnType << ' ' << s._name << "( ";
     for( auto& p : s._parameters )
         _out << p->_name << ' ';
     _out << ')';
+
+    visit(*s._body);
+}
+
+void CodeGeneratorSi::visit(Dim& d)
+{
 }
 
 } // namespace avium

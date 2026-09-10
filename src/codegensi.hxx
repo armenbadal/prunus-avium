@@ -20,6 +20,8 @@ public:
 private:
     void visit(Program& p);
     void visit(Subroutine& s);
+    void visit(Sequence& q);
+    void visit(Dim& d);
 
     std::ostringstream _out;
 };
