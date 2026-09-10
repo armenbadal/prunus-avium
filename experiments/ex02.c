@@ -10,7 +10,7 @@ void avium_g(avium_array* a, avium_array* b)
 {
     double i = 0.0;
     const double begin = 0.0;
-    const double end = avium_array_length(a) - 1.0;
+    const double end = avium_array_length(a, 2) - 1.0;
     const double step = 1.0;
     i = begin;
 

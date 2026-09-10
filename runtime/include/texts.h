@@ -4,7 +4,11 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-typedef struct _avium_text avium_text;
+typedef struct avium_text {
+    const char* data;
+    size_t length;
+    bool owned;
+} avium_text;
 
 avium_text avium_text_create(const char* data, size_t length, unsigned line);
 avium_text avium_text_copy(avium_text value, unsigned line);
