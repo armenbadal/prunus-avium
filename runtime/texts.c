@@ -7,6 +7,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+typedef struct _avium_text {
+    const char *data;
+    size_t length;
+    bool owned;
+} avium_text;
+
 static void text_error(unsigned line, const char* message)
 {
     fprintf(stderr, "%u: %s\n", line, message);
@@ -95,12 +101,8 @@ avium_text avium_text_concat(avium_text left, avium_text right, unsigned line)
 
 int avium_text_compare(avium_text left, avium_text right)
 {
-    const size_t common_length = left.length < right.length
-        ? left.length
-        : right.length;
-    const int comparison = common_length == 0
-        ? 0
-        : memcmp(left.data, right.data, common_length);
+    const size_t common_length = left.length < right.length ? left.length : right.length;
+    const int comparison = common_length == 0 ? 0 : memcmp(left.data, right.data, common_length);
 
     if( comparison != 0 )
         return comparison;
