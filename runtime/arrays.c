@@ -31,8 +31,7 @@ static size_t element_size(avium_element_type type, unsigned line)
     array_error(line, "Զանգվածի տարրի տիպն անհայտ է։");
 }
 
-static void* array_element_at(avium_array* array, avium_element_type type,
-    double index, unsigned line)
+static void* array_element_at(avium_array* array, avium_element_type type, double index, unsigned line)
 {
     if( array == NULL )
         array_error(line, "Զանգվածային հղումը դատարկ է։");
@@ -96,8 +95,7 @@ double avium_array_length(const avium_array* array)
     return array == NULL ? 0.0 : (double)array->length;
 }
 
-avium_text* avium_text_array_at(avium_array* array, double index,
-    unsigned line)
+avium_text* avium_text_array_at(avium_array* array, double index, unsigned line)
 {
     return array_element_at(array, AVIUM_ARRAY_TEXT, index, line);
 }
