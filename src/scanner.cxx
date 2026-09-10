@@ -27,6 +27,7 @@ const std::map<std::string_view, Token> keywords{
     {"TO", Token::To},
     {"STEP", Token::Step},
     {"CALL", Token::Call},
+    {"RETURN", Token::Return},
     {"END", Token::End},
     {"MOD", Token::Mod},
     {"AND", Token::And},

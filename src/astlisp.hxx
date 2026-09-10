@@ -11,7 +11,7 @@ namespace avium {
 
 class AstLisp : public ASTVisitor<AstLisp, std::string> {
 public:
-    void emit(Program::Ptr node, std::ostream& output);
+    void emit(Program& node, std::ostream& output);
 
     using ASTVisitor<AstLisp, std::string>::visit;
 
@@ -25,7 +25,10 @@ public:
     std::string visit(While& node);
     std::string visit(For& node);
     std::string visit(Call& node);
+    std::string visit(Return& node);
 
+    std::string visit(ScalarType& node);
+    std::string visit(ArrayType& node);
     std::string visit(Apply& node);
     std::string visit(Binary& node);
     std::string visit(Unary& node);

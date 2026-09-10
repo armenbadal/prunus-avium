@@ -1,7 +1,5 @@
 #pragma once
 
-#include "lexeme.hxx"
-
 #include <cstddef>
 #include <ostream>
 #include <string>
@@ -14,7 +12,6 @@ namespace avium {
 using Error = std::tuple<unsigned int, std::string>;
 
 std::ostream& operator<<(std::ostream& output, const Error& error);
-std::string describe(const Lexeme& lexeme);
 
 class Diagnostics {
 public:

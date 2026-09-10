@@ -1,8 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "lexeme.hxx"
+#include "formatters.hxx"
 
 #include <cstddef>
+#include <format>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -63,6 +64,7 @@ TEST_CASE("Կեռասի բոլոր token-ներն ունեն canonical անու�
         {Token::To, "TO"},
         {Token::Step, "STEP"},
         {Token::Call, "CALL"},
+        {Token::Return, "RETURN"},
         {Token::End, "END"},
 
         {Token::Real, "REAL"},
@@ -98,5 +100,5 @@ TEST_CASE("Կեռասի բոլոր token-ներն ունեն canonical անու�
     CHECK(names.size() == static_cast<std::size_t>(Token::Eof) + 1);
 
     for( const auto& [token, name] : names )
-        CHECK(toString(token) == name);
+        CHECK(std::format("{}", token) == name);
 }
