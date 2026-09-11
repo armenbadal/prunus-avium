@@ -18,24 +18,43 @@ public:
     using ASTVisitor<NodeKindVisitor, NodeKind>::visit;
 
     NodeKind visit(Program&) { return NodeKind::Program; }
+
     NodeKind visit(Subroutine&) { return NodeKind::Subroutine; }
+
     NodeKind visit(Sequence&) { return NodeKind::Sequence; }
+
     NodeKind visit(Dim&) { return NodeKind::Dim; }
+
     NodeKind visit(Let&) { return NodeKind::Let; }
+
     NodeKind visit(If&) { return NodeKind::If; }
+
     NodeKind visit(IfBranch&) { return NodeKind::IfBranch; }
+
     NodeKind visit(While&) { return NodeKind::While; }
+
     NodeKind visit(For&) { return NodeKind::For; }
+
     NodeKind visit(Call&) { return NodeKind::Call; }
+
     NodeKind visit(ScalarType&) { return NodeKind::ScalarType; }
+
     NodeKind visit(ArrayType&) { return NodeKind::ArrayType; }
+
     NodeKind visit(Return&) { return NodeKind::Return; }
+
     NodeKind visit(Apply&) { return NodeKind::Apply; }
+
     NodeKind visit(Binary&) { return NodeKind::Binary; }
+
     NodeKind visit(Unary&) { return NodeKind::Unary; }
+
     NodeKind visit(Variable&) { return NodeKind::Variable; }
+
     NodeKind visit(Text&) { return NodeKind::Text; }
+
     NodeKind visit(Number&) { return NodeKind::Number; }
+
     NodeKind visit(Boolean&) { return NodeKind::Boolean; }
 };
 

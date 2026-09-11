@@ -89,6 +89,7 @@ PenaltyExcessCharacter: 1000000
 PenaltyReturnTypeOnItsOwnLine: 60
 PointerAlignment: Left
 ReflowComments:  false
+SeparateDefinitionBlocks: Always
 SortIncludes:    false
 SortUsingDeclarations: true
 SpaceAfterCStyleCast: false
