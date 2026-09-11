@@ -646,8 +646,8 @@ TEST_CASE("Semantic analyzer requires BOOL branch conditions", "[semantic]")
 
     CHECK_FALSE(result.valid);
     REQUIRE(result.errors.size() == 2);
-    CHECK(std::get<1>(result.errors[0]) == "Պայմանական ճյուղի պայմանը պետք է լինի BOOL, բայց ստացվել է REAL։");
-    CHECK(std::get<1>(result.errors[1]) == "Պայմանական ճյուղի պայմանը պետք է լինի BOOL, բայց ստացվել է TEXT։");
+    CHECK(std::get<1>(result.errors[0]) == "Ճյուղավորման պայմանը պետք է լինի BOOL, բայց ստացվել է REAL։");
+    CHECK(std::get<1>(result.errors[1]) == "Ճյուղավորման պայմանը պետք է լինի BOOL, բայց ստացվել է TEXT։");
 }
 
 TEST_CASE("Semantic analyzer requires a BOOL WHILE condition", "[semantic]")

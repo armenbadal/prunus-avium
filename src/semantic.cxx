@@ -1,4 +1,5 @@
 #include "semantic.hxx"
+#include "astvisitor.hxx"
 #include "formatters.hxx"
 
 #include <algorithm>
@@ -137,71 +138,410 @@ const Type* SemanticModel::type(NodeId node) const
     return nullptr;
 }
 
-SemanticAnalyzer::SemanticAnalyzer(SymbolTable& symbols, SemanticModel& model, Diagnostics& diagnostics)
+namespace {
+
+class NameResolutionPass : public ASTVisitor<NameResolutionPass> {
+public:
+    NameResolutionPass(SymbolTable& symbols, SemanticModel& model, Diagnostics& diagnostics);
+
+    using ASTVisitor<NameResolutionPass>::visit;
+
+    void visit(Program& node);
+    void visit(Subroutine& node);
+    void visit(Sequence& node);
+    void visit(Dim& node);
+    void visit(Let& node);
+    void visit(If& node);
+    void visit(IfBranch& node);
+    void visit(While& node);
+    void visit(For& node);
+    void visit(Call& node);
+    void visit(Return& node);
+
+    void visit(ScalarType&) {}
+
+    void visit(ArrayType& node);
+
+    void visit(Boolean&) {}
+
+    void visit(Number&) {}
+
+    void visit(Text&) {}
+
+    void visit(Variable& node);
+    void visit(Unary& node);
+    void visit(Binary& node);
+    void visit(Apply& node);
+
+private:
+    void declareBuiltins();
+    void declareSubroutines(const Program& program);
+    void resolveEntryPoint(const Program& program);
+    void declareParameters(const Subroutine& subroutine);
+    void declareLocals(const Sequence& sequence);
+    void declareDim(const Dim& dim);
+    void declareForVariable(const For& loop);
+
+    std::optional<SymbolId> resolveVariable(const Variable& variable);
+    std::optional<SymbolId> resolveSubroutine(const Node& node, std::string_view name);
+    void report(const Node& node, std::string_view message);
+
+    SymbolTable& _symbols;
+    SemanticModel& _model;
+    Diagnostics& _diagnostics;
+};
+
+class TypeCheckingPass : public ASTVisitor<TypeCheckingPass> {
+public:
+    TypeCheckingPass(SymbolTable& symbols, SemanticModel& model, Diagnostics& diagnostics);
+
+    using ASTVisitor<TypeCheckingPass>::visit;
+
+    void visit(Program& node);
+    void visit(Subroutine& node);
+    void visit(Sequence& node);
+    void visit(Dim& node);
+    void visit(Let& node);
+    void visit(If& node);
+    void visit(IfBranch& node);
+    void visit(While& node);
+    void visit(For& node);
+    void visit(Call& node);
+    void visit(Return& node);
+
+    void visit(ScalarType&) {}
+
+    void visit(ArrayType&) {}
+
+    void visit(Boolean& node);
+    void visit(Number& node);
+    void visit(Text& node);
+    void visit(Variable& node);
+    void visit(Unary& node);
+    void visit(Binary& node);
+    void visit(Apply& node);
+
+private:
+    std::optional<SymbolId> boundVariable(const Variable& variable);
+    std::optional<SymbolId> boundSubroutine(const Node& node);
+    void validateArguments(const Node& node, std::string_view name, const std::vector<Expression::Ptr>& arguments, const SubroutineSignature& signature);
+    const Type* expressionType(Expression& expression);
+    bool isArrayExpression(const Expression& expression) const;
+    bool requireScalar(const Expression& expression);
+    void validateIndex(Expression& index);
+    bool definitelyReturns(const Sequence& sequence) const;
+    bool definitelyReturns(const Statement& statement) const;
+    void report(const Node& node, std::string_view message);
+
+    SymbolTable& _symbols;
+    SemanticModel& _model;
+    Diagnostics& _diagnostics;
+    const ScalarType* _currentReturnType{nullptr};
+};
+
+NameResolutionPass::NameResolutionPass(SymbolTable& symbols, SemanticModel& model, Diagnostics& diagnostics)
     : _symbols{symbols}
     , _model{model}
     , _diagnostics{diagnostics}
 {
 }
 
-bool SemanticAnalyzer::analyze(Program& program)
+void NameResolutionPass::visit(Program& program)
 {
     declareBuiltins();
     declareSubroutines(program);
-    visit(program);
-    return _diagnostics.count() == 0;
-}
-
-void SemanticAnalyzer::visit(Program& program)
-{
-    auto si = std::ranges::find_if(program._subroutines, [](const auto& sub) { return sub->_name == "Main"; });
-    if( si == program._subroutines )
-        report(program, "Main ենթածրագիրը բացակայում է։");
-    else {
-        Subroutine* main = si->get();
-
-        if( !main->_parameters.empty() )
-            report(*main, "'Main' ենթածրագիրը պարամետրեր չի կարող ունենալ։");
-
-        if( main->_returnType )
-            report(*main, "'Main' ենթածրագիրը արժեք չի կարող վերադարձնել։");
-
-        _model.setEntryPoint(*_model.symbol(main->id()));
-    }
+    resolveEntryPoint(program);
 
     for( const auto& subroutine : program._subroutines )
         visit(*subroutine);
 }
 
-void SemanticAnalyzer::visit(Subroutine& subroutine)
+void NameResolutionPass::visit(Subroutine& subroutine)
 {
     _symbols.openScope();
-    _currentReturnType = subroutine._returnType.get();
     declareParameters(subroutine);
     declareLocals(*subroutine._body);
+    visit(*subroutine._body);
+    _symbols.closeScope();
+}
+
+void NameResolutionPass::visit(Sequence& sequence)
+{
+    for( const auto& statement : sequence._items )
+        visit(*statement);
+}
+
+void NameResolutionPass::visit(Dim& dim)
+{
+    if( dim._type->isArray() ) {
+        const auto& array = static_cast<const ArrayType&>(*dim._type);
+        if( array._size )
+            visit(*array._size);
+    }
+}
+
+void NameResolutionPass::visit(Let& let)
+{
+    resolveVariable(*let._variable);
+    if( let._index )
+        visit(*let._index);
+    visit(*let._value);
+}
+
+void NameResolutionPass::visit(If& conditional)
+{
+    for( const auto& branch : conditional._branches )
+        visit(*branch);
+    if( conditional._alternative )
+        visit(*conditional._alternative);
+}
+
+void NameResolutionPass::visit(IfBranch& branch)
+{
+    visit(*branch._condition);
+    visit(*branch._body);
+}
+
+void NameResolutionPass::visit(While& loop)
+{
+    visit(*loop._condition);
+    visit(*loop._body);
+}
+
+void NameResolutionPass::visit(For& loop)
+{
+    resolveVariable(*loop._parameter);
+    visit(*loop._begin);
+    visit(*loop._end);
+    visit(*loop._step);
+    visit(*loop._body);
+}
+
+void NameResolutionPass::visit(Call& call)
+{
+    resolveSubroutine(call, call._callee);
+    for( const auto& argument : call._arguments )
+        visit(*argument);
+}
+
+void NameResolutionPass::visit(Return& statement)
+{
+    visit(*statement._value);
+}
+
+void NameResolutionPass::visit(ArrayType& array)
+{
+    if( array._size )
+        visit(*array._size);
+}
+
+void NameResolutionPass::visit(Variable& variable)
+{
+    resolveVariable(variable);
+}
+
+void NameResolutionPass::visit(Unary& unary)
+{
+    visit(*unary._operand);
+}
+
+void NameResolutionPass::visit(Binary& binary)
+{
+    visit(*binary._left);
+    visit(*binary._right);
+}
+
+void NameResolutionPass::visit(Apply& apply)
+{
+    resolveSubroutine(apply, apply._callee);
+    for( const auto& argument : apply._arguments )
+        visit(*argument);
+}
+
+void NameResolutionPass::declareBuiltins()
+{
+    for( const auto& signature : builtinSignatures() )
+        _symbols.declareSubroutine(signature);
+}
+
+void NameResolutionPass::declareSubroutines(const Program& program)
+{
+    for( const auto& subroutine : program._subroutines ) {
+        std::vector<const Type*> parameters;
+        parameters.reserve(subroutine->_parameters.size());
+        for( const auto& parameter : subroutine->_parameters )
+            parameters.push_back(parameter->_type.get());
+
+        const auto existing = _symbols.lookupSubroutine(subroutine->_name);
+        if( existing ) {
+            const auto& symbol = _symbols.symbol(*existing);
+            if( symbol.subroutine->builtin )
+                report(*subroutine, std::format("'{}' անունը պատկանում է ներդրված ենթածրագրի։", subroutine->_name));
+            else
+                report(*subroutine, std::format("'{}' ենթածրագիրն արդեն սահմանված է։", subroutine->_name));
+            continue;
+        }
+
+        const auto id = _symbols.declareSubroutine({subroutine->_name, std::move(parameters), subroutine->_returnType.get(), false});
+        _model.bind(subroutine->id(), id);
+    }
+}
+
+void NameResolutionPass::resolveEntryPoint(const Program& program)
+{
+    const Subroutine* main = nullptr;
+    for( const auto& subroutine : program._subroutines )
+        if( subroutine->_name == "Main" && main == nullptr )
+            main = subroutine.get();
+
+    if( main == nullptr ) {
+        report(program, "Main ենթածրագիրը բացակայում է։");
+        return;
+    }
+
+    if( const auto id = _model.symbol(main->id()) )
+        _model.setEntryPoint(*id);
+    if( !main->_parameters.empty() )
+        report(*main, "'Main' ենթածրագիրը պարամետրեր չի կարող ունենալ։");
+    if( main->_returnType )
+        report(*main, "'Main' ենթածրագիրը արժեք չի կարող վերադարձնել։");
+}
+
+void NameResolutionPass::declareParameters(const Subroutine& subroutine)
+{
+    for( const auto& parameter : subroutine._parameters ) {
+        const auto id = _symbols.declareVariable(parameter->_name, *parameter->_type, VariableStorage::Parameter);
+        if( id == UnknownSymbol )
+            report(*parameter, std::format("'{}' անունն արդեն սահմանված է այս ենթածրագրում։", parameter->_name));
+        else
+            _model.bind(parameter->id(), id);
+    }
+}
+
+void NameResolutionPass::declareLocals(const Sequence& sequence)
+{
+    for( const auto& statement : sequence._items )
+        switch( statement->kind ) {
+            case NodeKind::Dim:
+                declareDim(static_cast<const Dim&>(*statement));
+                break;
+            case NodeKind::If: {
+                const auto& conditional = static_cast<const If&>(*statement);
+                for( const auto& branch : conditional._branches )
+                    declareLocals(*branch->_body);
+                if( conditional._alternative )
+                    declareLocals(*conditional._alternative);
+                break;
+            }
+            case NodeKind::While:
+                declareLocals(*static_cast<const While&>(*statement)._body);
+                break;
+            case NodeKind::For: {
+                const auto& loop = static_cast<const For&>(*statement);
+                declareForVariable(loop);
+                declareLocals(*loop._body);
+                break;
+            }
+            default:
+                break;
+        }
+}
+
+void NameResolutionPass::declareDim(const Dim& dim)
+{
+    const auto id = _symbols.declareVariable(dim._name, *dim._type, VariableStorage::Local);
+    if( id == UnknownSymbol )
+        report(dim, std::format("'{}' անունն արդեն սահմանված է այս ենթածրագրում։", dim._name));
+    else
+        _model.bind(dim.id(), id);
+}
+
+void NameResolutionPass::declareForVariable(const For& loop)
+{
+    const auto& name = loop._parameter->_name;
+    if( _symbols.declaredInCurrentScope(name) ) {
+        const auto id = *_symbols.lookup(name);
+        const auto& symbol = _symbols.symbol(id);
+        _model.bind(loop._parameter->id(), id);
+        if( symbol.kind != SymbolKind::Variable || !hasScalarType(symbol.type, ScalarType::Name::Real) )
+            report(loop, std::format("FOR-ի '{}' հաշվիչը պետք է լինի պարզ REAL փոփոխական։", name));
+        return;
+    }
+
+    const auto id = _symbols.declareVariable(name, scalarType(ScalarType::Name::Real), VariableStorage::ForVariable);
+    _model.bind(loop._parameter->id(), id);
+}
+
+std::optional<SymbolId> NameResolutionPass::resolveVariable(const Variable& variable)
+{
+    const auto id = _symbols.lookup(variable._name);
+    if( !id ) {
+        report(variable, std::format("'{}' անունով փոփոխական սահմանված չէ։", variable._name));
+        return std::nullopt;
+    }
+
+    const auto& symbol = _symbols.symbol(*id);
+    if( symbol.kind != SymbolKind::Variable ) {
+        report(variable, std::format("'{}' անունը փոփոխական չէ։", variable._name));
+        return std::nullopt;
+    }
+
+    _model.bind(variable.id(), *id);
+    return id;
+}
+
+std::optional<SymbolId> NameResolutionPass::resolveSubroutine(const Node& node, std::string_view name)
+{
+    const auto id = _symbols.lookupSubroutine(name);
+    if( !id ) {
+        report(node, std::format("'{}' անունով ենթածրագիր սահմանված չէ։", name));
+        return std::nullopt;
+    }
+    _model.bind(node.id(), *id);
+    return id;
+}
+
+void NameResolutionPass::report(const Node& node, std::string_view message)
+{
+    _diagnostics.advance();
+    _diagnostics.mark(node.line, message);
+}
+
+TypeCheckingPass::TypeCheckingPass(SymbolTable& symbols, SemanticModel& model, Diagnostics& diagnostics)
+    : _symbols{symbols}
+    , _model{model}
+    , _diagnostics{diagnostics}
+{
+}
+
+void TypeCheckingPass::visit(Program& program)
+{
+    for( const auto& subroutine : program._subroutines )
+        visit(*subroutine);
+}
+
+void TypeCheckingPass::visit(Subroutine& subroutine)
+{
+    _currentReturnType = subroutine._returnType.get();
     visit(*subroutine._body);
 
     if( subroutine._name != "Main" && _currentReturnType != nullptr && !definitelyReturns(*subroutine._body) )
         report(subroutine, std::format("'{}' ֆունկցիայի ոչ բոլոր կատարման ուղիներն են արժեք վերադարձնում։", subroutine._name));
 
     _currentReturnType = nullptr;
-    _symbols.closeScope();
 }
 
-void SemanticAnalyzer::visit(Sequence& sequence)
+void TypeCheckingPass::visit(Sequence& sequence)
 {
     for( const auto& statement : sequence._items )
         visit(*statement);
 }
 
-void SemanticAnalyzer::visit(Dim& dim)
+void TypeCheckingPass::visit(Dim& dim)
 {
-    // եթե զանգվածի սահմանում չէ, ապա ստուգելու բան չկա.
-    // շարահյուսական վերլուծիչը երաշխավորում է ճիշտ DIM հանգույցը
     if( !dim._type->isArray() )
         return;
 
-    // ? սուգել այս բլոկը, parser-ը երաշխավորում է, որ զանգվածի չափը տրվաշ լինիի
     const auto& array = static_cast<ArrayType&>(*dim._type);
     if( !array._size ) {
         report(dim, "Զանգվածի չափը նշված չէ։");
@@ -225,9 +565,9 @@ void SemanticAnalyzer::visit(Dim& dim)
     }
 }
 
-void SemanticAnalyzer::visit(Let& let)
+void TypeCheckingPass::visit(Let& let)
 {
-    const auto target = resolveVariable(*let._variable);
+    const auto target = boundVariable(*let._variable);
     if( let._index )
         validateIndex(*let._index);
     const auto valueType = expressionType(*let._value);
@@ -259,7 +599,7 @@ void SemanticAnalyzer::visit(Let& let)
         report(*let._value, std::format("'{}' փոփոխականին պետք է վերագրվի {}, բայց ստացվել է {}։", let._variable->_name, targetType, *valueType));
 }
 
-void SemanticAnalyzer::visit(If& conditional)
+void TypeCheckingPass::visit(If& conditional)
 {
     for( const auto& branch : conditional._branches )
         visit(*branch);
@@ -267,18 +607,18 @@ void SemanticAnalyzer::visit(If& conditional)
         visit(*conditional._alternative);
 }
 
-void SemanticAnalyzer::visit(IfBranch& branch)
+void TypeCheckingPass::visit(IfBranch& branch)
 {
     const auto conditionType = expressionType(*branch._condition);
     const auto scalarCondition = requireScalar(*branch._condition);
     const auto& boolType = scalarType(ScalarType::Name::Bool);
     const auto wrongConditionType = scalarCondition && typeMismatch(conditionType, boolType);
     if( wrongConditionType )
-        report(*branch._condition, std::format("Պայմանական ճյուղի պայմանը պետք է լինի BOOL, բայց ստացվել է {}։", *conditionType));
+        report(*branch._condition, std::format("Ճյուղավորման պայմանը պետք է լինի BOOL, բայց ստացվել է {}։", *conditionType));
     visit(*branch._body);
 }
 
-void SemanticAnalyzer::visit(While& loop)
+void TypeCheckingPass::visit(While& loop)
 {
     const auto conditionType = expressionType(*loop._condition);
     const auto scalarCondition = requireScalar(*loop._condition);
@@ -289,7 +629,7 @@ void SemanticAnalyzer::visit(While& loop)
     visit(*loop._body);
 }
 
-void SemanticAnalyzer::visit(For& loop)
+void TypeCheckingPass::visit(For& loop)
 {
     visit(*loop._parameter);
 
@@ -317,12 +657,12 @@ void SemanticAnalyzer::visit(For& loop)
     visit(*loop._body);
 }
 
-void SemanticAnalyzer::visit(Call& call)
+void TypeCheckingPass::visit(Call& call)
 {
     for( const auto& argument : call._arguments )
         expressionType(*argument);
 
-    const auto id = resolveSubroutine(call, call._callee);
+    const auto id = boundSubroutine(call);
     if( !id.has_value() )
         return;
 
@@ -332,15 +672,7 @@ void SemanticAnalyzer::visit(Call& call)
     validateArguments(call, call._callee, call._arguments, signature);
 }
 
-void SemanticAnalyzer::visit(ScalarType&)
-{
-}
-
-void SemanticAnalyzer::visit(ArrayType&)
-{
-}
-
-void SemanticAnalyzer::visit(Return& statement)
+void TypeCheckingPass::visit(Return& statement)
 {
     const auto valueType = expressionType(*statement._value);
     const auto scalarValue = requireScalar(*statement._value);
@@ -352,33 +684,32 @@ void SemanticAnalyzer::visit(Return& statement)
 
     const auto wrongValueType = scalarValue && typeMismatch(valueType, *_currentReturnType);
     if( wrongValueType )
-        report(*statement._value,
-            std::format("Ֆունկցիայից պետք է վերադարձվի {}, բայց ստացվել է {}։",
-                static_cast<const Type&>(*_currentReturnType), *valueType));
+        report(*statement._value, std::format("Ֆունկցիայից պետք է վերադարձվի {}, բայց ստացվել է {}։", static_cast<const Type&>(*_currentReturnType), *valueType));
 }
 
-void SemanticAnalyzer::visit(Boolean& boolean)
+void TypeCheckingPass::visit(Boolean& boolean)
 {
-    //_model.setType(boolean.id(), scalarType(ScalarType::Name::Bool));
-    _model.setType(boolean.id(), ScalarType{ScalarType::Name::Bool, boolean.line});
+    _model.setType(boolean.id(), scalarType(ScalarType::Name::Bool));
 }
 
-void SemanticAnalyzer::visit(Number& number)
+void TypeCheckingPass::visit(Number& number)
 {
     _model.setType(number.id(), scalarType(ScalarType::Name::Real));
 }
 
-void SemanticAnalyzer::visit(Text& text)
+void TypeCheckingPass::visit(Text& text)
 {
     _model.setType(text.id(), scalarType(ScalarType::Name::Text));
 }
 
-void SemanticAnalyzer::visit(Variable& variable)
+void TypeCheckingPass::visit(Variable& variable)
 {
-    resolveVariable(variable);
+    const auto id = boundVariable(variable);
+    if( id.has_value() )
+        _model.setType(variable.id(), *_symbols.symbol(*id).type);
 }
 
-void SemanticAnalyzer::visit(Unary& unary)
+void TypeCheckingPass::visit(Unary& unary)
 {
     const auto operandType = expressionType(*unary._operand);
     const auto scalar = requireScalar(*unary._operand);
@@ -406,7 +737,7 @@ void SemanticAnalyzer::visit(Unary& unary)
     }
 }
 
-void SemanticAnalyzer::visit(Binary& binary)
+void TypeCheckingPass::visit(Binary& binary)
 {
     const auto leftType = expressionType(*binary._left);
     const auto rightType = expressionType(*binary._right);
@@ -502,12 +833,12 @@ void SemanticAnalyzer::visit(Binary& binary)
         _model.setType(binary.id(), *type);
 }
 
-void SemanticAnalyzer::visit(Apply& apply)
+void TypeCheckingPass::visit(Apply& apply)
 {
     for( const auto& argument : apply._arguments )
         expressionType(*argument);
 
-    const auto id = resolveSubroutine(apply, apply._callee);
+    const auto id = boundSubroutine(apply);
     if( !id.has_value() )
         return;
 
@@ -519,142 +850,31 @@ void SemanticAnalyzer::visit(Apply& apply)
     validateArguments(apply, apply._callee, apply._arguments, signature);
 }
 
-void SemanticAnalyzer::declareBuiltins()
+std::optional<SymbolId> TypeCheckingPass::boundVariable(const Variable& variable)
 {
-    for( const auto& signature : builtinSignatures() )
-        _symbols.declareSubroutine(signature);
-}
-
-void SemanticAnalyzer::declareSubroutines(const Program& program)
-{
-    for( const auto& subroutine : program._subroutines ) {
-        std::vector<const Type*> parameters;
-        parameters.reserve(subroutine->_parameters.size());
-        for( const auto& parameter : subroutine->_parameters )
-            parameters.push_back(parameter->_type.get());
-
-        const auto existing = _symbols.lookupSubroutine(subroutine->_name);
-        if( existing.has_value() ) {
-            const auto& symbol = _symbols.symbol(*existing);
-            if( symbol.subroutine->builtin )
-                report(*subroutine, std::format("'{}' անունը պատկանում է ներդրված ենթածրագրի։", subroutine->_name));
-            else
-                report(*subroutine, std::format("'{}' ենթածրագիրն արդեն սահմանված է։", subroutine->_name));
-            continue;
-        }
-
-        const auto& name = subroutine->_name;
-        const auto returnType = subroutine->_returnType.get();
-        const auto builtin = false;
-        SubroutineSignature signature{name, std::move(parameters), returnType, builtin};
-        const auto id = _symbols.declareSubroutine(std::move(signature));
-        _model.bind(subroutine->id(), id);
-    }
-}
-
-void SemanticAnalyzer::declareParameters(const Subroutine& subroutine)
-{
-    for( const auto& parameter : subroutine._parameters ) {
-        const auto& name = parameter->_name;
-        const auto storage = VariableStorage::Parameter;
-        const auto id = _symbols.declareVariable(name, *parameter->_type, storage);
-        if( id == UnknownSymbol )
-            report(*parameter, std::format("'{}' անունն արդեն սահմանված է այս ենթածրագրում։", parameter->_name));
-        else
-            _model.bind(parameter->id(), id);
-    }
-}
-
-void SemanticAnalyzer::declareLocals(const Sequence& sequence)
-{
-    for( const auto& statement : sequence._items ) {
-        switch( statement->kind ) {
-            case NodeKind::Dim:
-                declareDim(static_cast<const Dim&>(*statement));
-                break;
-            case NodeKind::If: {
-                const auto& conditional = static_cast<const If&>(*statement);
-                for( const auto& branch : conditional._branches )
-                    declareLocals(*branch->_body);
-                if( conditional._alternative )
-                    declareLocals(*conditional._alternative);
-                break;
-            }
-            case NodeKind::While:
-                declareLocals(*static_cast<const While&>(*statement)._body);
-                break;
-            case NodeKind::For: {
-                const auto& loop = static_cast<const For&>(*statement);
-                declareForVariable(loop);
-                declareLocals(*loop._body);
-                break;
-            }
-            default:
-                break;
-        }
-    }
-}
-
-void SemanticAnalyzer::declareDim(const Dim& dim)
-{
-    const auto storage = VariableStorage::Local;
-    const auto id = _symbols.declareVariable(dim._name, *dim._type, storage);
-    if( id == UnknownSymbol )
-        report(dim, std::format("'{}' անունն արդեն սահմանված է այս ենթածրագրում։", dim._name));
-    else
-        _model.bind(dim.id(), id);
-}
-
-void SemanticAnalyzer::declareForVariable(const For& loop)
-{
-    const auto& name = loop._parameter->_name;
-    if( _symbols.declaredInCurrentScope(name) ) {
-        const auto id = *_symbols.lookup(name);
-        const auto& symbol = _symbols.symbol(id);
-        _model.bind(loop._parameter->id(), id);
-        const auto validType = symbol.type != nullptr && hasScalarType(symbol.type, ScalarType::Name::Real);
-        if( symbol.kind != SymbolKind::Variable || !validType )
-            report(loop, std::format("FOR-ի '{}' հաշվիչը պետք է լինի պարզ REAL փոփոխական։", name));
-        return;
-    }
-
-    const auto storage = VariableStorage::ForVariable;
-    const auto id = _symbols.declareVariable(name, scalarType(ScalarType::Name::Real), storage);
-    _model.bind(loop._parameter->id(), id);
-}
-
-std::optional<SymbolId> SemanticAnalyzer::resolveVariable(const Variable& variable)
-{
-    const auto id = _symbols.lookup(variable._name);
-    if( !id.has_value() ) {
-        report(variable, std::format("'{}' անունով փոփոխական սահմանված չէ։", variable._name));
+    const auto id = _model.symbol(variable.id());
+    if( !id )
         return std::nullopt;
-    }
 
     const auto& symbol = _symbols.symbol(*id);
-    if( symbol.kind != SymbolKind::Variable ) {
-        report(variable, std::format("'{}' անունը փոփոխական չէ։", variable._name));
+    if( symbol.kind != SymbolKind::Variable )
         return std::nullopt;
-    }
 
-    _model.bind(variable.id(), *id);
     _model.setType(variable.id(), *symbol.type);
     return id;
 }
 
-std::optional<SymbolId> SemanticAnalyzer::resolveSubroutine(const Node& node, std::string_view name)
+std::optional<SymbolId> TypeCheckingPass::boundSubroutine(const Node& node)
 {
-    const auto id = _symbols.lookupSubroutine(name);
-    if( !id.has_value() ) {
-        report(node, std::format("'{}' անունով ենթածրագիր սահմանված չէ։", name));
+    const auto id = _model.symbol(node.id());
+    if( !id )
         return std::nullopt;
-    }
 
-    _model.bind(node.id(), *id);
-    return id;
+    const auto& symbol = _symbols.symbol(*id);
+    return symbol.kind == SymbolKind::Subroutine ? id : std::nullopt;
 }
 
-void SemanticAnalyzer::validateArguments(const Node& node, std::string_view name, const std::vector<Expression::Ptr>& arguments, const SubroutineSignature& signature)
+void TypeCheckingPass::validateArguments(const Node& node, std::string_view name, const std::vector<Expression::Ptr>& arguments, const SubroutineSignature& signature)
 {
     const auto expectedCount = signature.parameters.size();
     const auto actualCount = arguments.size();
@@ -665,11 +885,10 @@ void SemanticAnalyzer::validateArguments(const Node& node, std::string_view name
     for( std::size_t index = 0; index < commonCount; ++index ) {
         const auto& argument = arguments[index];
         const auto argumentType = expressionType(*argument);
-        const auto parameterType = signature.parameters[index];
-
         if( argumentType == nullptr )
             continue;
 
+        const auto parameterType = signature.parameters[index];
         if( parameterType == nullptr ) {
             requireScalar(*argument);
             continue;
@@ -681,9 +900,8 @@ void SemanticAnalyzer::validateArguments(const Node& node, std::string_view name
                 continue;
             }
         }
-        else if( !requireScalar(*argument) ) {
+        else if( !requireScalar(*argument) )
             continue;
-        }
 
         const auto& expectedType = *parameterType;
         const auto wrongArgumentType = typeMismatch(argumentType, expectedType);
@@ -692,29 +910,31 @@ void SemanticAnalyzer::validateArguments(const Node& node, std::string_view name
     }
 }
 
-const Type* SemanticAnalyzer::expressionType(Expression& expression)
+const Type* TypeCheckingPass::expressionType(Expression& expression)
 {
     if( const auto type = _model.type(expression.id()) )
         return type;
+
     visit(expression);
     return _model.type(expression.id());
 }
 
-bool SemanticAnalyzer::isArrayExpression(const Expression& expression) const
+bool TypeCheckingPass::isArrayExpression(const Expression& expression) const
 {
     const auto type = _model.type(expression.id());
     return type != nullptr && type->isArray();
 }
 
-bool SemanticAnalyzer::requireScalar(const Expression& expression)
+bool TypeCheckingPass::requireScalar(const Expression& expression)
 {
     if( !isArrayExpression(expression) )
         return true;
+
     report(expression, "Զանգվածը չի կարող օգտագործվել որպես պարզ արժեք։");
     return false;
 }
 
-void SemanticAnalyzer::validateIndex(Expression& index)
+void TypeCheckingPass::validateIndex(Expression& index)
 {
     const auto indexType = expressionType(index);
     const auto scalarIndex = requireScalar(index);
@@ -724,13 +944,13 @@ void SemanticAnalyzer::validateIndex(Expression& index)
         report(index, std::format("Զանգվածի ինդեքսը պետք է լինի REAL, բայց ստացվել է {}։", *indexType));
 }
 
-bool SemanticAnalyzer::definitelyReturns(const Sequence& sequence) const
+bool TypeCheckingPass::definitelyReturns(const Sequence& sequence) const
 {
     return std::ranges::any_of(sequence._items,
         [this](const auto& statement) { return definitelyReturns(*statement); });
 }
 
-bool SemanticAnalyzer::definitelyReturns(const Statement& statement) const
+bool TypeCheckingPass::definitelyReturns(const Statement& statement) const
 {
     if( statement.kind == NodeKind::Return )
         return true;
@@ -745,10 +965,28 @@ bool SemanticAnalyzer::definitelyReturns(const Statement& statement) const
         [this](const auto& branch) { return definitelyReturns(*branch->_body); });
 }
 
-void SemanticAnalyzer::report(const Node& node, std::string_view message)
+void TypeCheckingPass::report(const Node& node, std::string_view message)
 {
     _diagnostics.advance();
     _diagnostics.mark(node.line, message);
+}
+
+} // namespace
+
+SemanticAnalyzer::SemanticAnalyzer(SymbolTable& symbols, SemanticModel& model, Diagnostics& diagnostics)
+    : _symbols{symbols}
+    , _model{model}
+    , _diagnostics{diagnostics}
+{
+}
+
+bool SemanticAnalyzer::analyze(Program& program)
+{
+    NameResolutionPass nameResolution{_symbols, _model, _diagnostics};
+    nameResolution.visit(program);
+    TypeCheckingPass typeChecking{_symbols, _model, _diagnostics};
+    typeChecking.visit(program);
+    return _diagnostics.count() == 0;
 }
 
 } // namespace avium

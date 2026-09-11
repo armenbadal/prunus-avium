@@ -15,7 +15,7 @@ namespace avium {
 using SymbolId = std::uint32_t;
 inline constexpr SymbolId UnknownSymbol = 0;
 
-// Անունը ծրագում կարող է ունենալ երկու դեր, փոփոխական, որը 
+// Անունը ծրագում կարող է ունենալ երկու դեր, փոփոխական, որը
 // կարող է նաև զանգված նշանակել, և ենթածրագիր
 enum class SymbolKind {
     Variable,   // փոփոխական
@@ -24,10 +24,10 @@ enum class SymbolKind {
 
 // Ենթածրագրի մարմնում փոփոխականի պահպանման դերը
 enum class VariableStorage {
-    Local,        // DIM-ով բացահայտ հայտարարված
-    Parameter,    // պարամետր
-    ForVariable,  // FOR-ի պարամետր, անբացահայտ REAL
-    Builtin,      // ներդրված ենթածրագիր
+    Local,       // DIM-ով բացահայտ հայտարարված
+    Parameter,   // պարամետր
+    ForVariable, // FOR-ի պարամետր, անբացահայտ REAL
+    Builtin,     // ներդրված ենթածրագիր
 };
 
 // Ենթածրագրի նկարագրությունը
@@ -40,14 +40,13 @@ struct SubroutineSignature {
 
 // Ծրագրում հանդիպող անունի նկարագրիչը որպես ինքնուրույն սիմվոլ
 struct Symbol {
-    SymbolId id{UnknownSymbol};  // եզակի իդենտիֆիկատոր
-    SymbolKind kind{SymbolKind::Variable};  // դերը
+    SymbolId id{UnknownSymbol};            // եզակի իդենտիֆիկատոր
+    SymbolKind kind{SymbolKind::Variable}; // դերը
     std::string name;
     const Type* type{};
     VariableStorage storage{VariableStorage::Local};
     std::optional<SubroutineSignature> subroutine;
 };
-
 
 class SymbolTable {
 public:
