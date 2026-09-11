@@ -368,6 +368,7 @@ void NameResolutionPass::declareSubroutines(const Program& program)
 {
     for( const auto& subroutine : program._subroutines ) {
         std::vector<const Type*> parameters;
+        parameters.reserve(subroutine->_parameters.size());
         for( const auto& parameter : subroutine->_parameters )
             parameters.push_back(parameter->_type.get());
 
@@ -394,7 +395,7 @@ void NameResolutionPass::resolveEntryPoint(const Program& program)
             main = subroutine.get();
 
     if( main == nullptr ) {
-        report(program, "Ծրագիրը պետք է ունենա ճիշտ մեկ 'Main' ենթածրագիր։");
+        report(program, "Main ենթածրագիրը բացակայում է։");
         return;
     }
 
