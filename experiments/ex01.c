@@ -7,7 +7,7 @@ void avium_f(double n)
 
     double i = 0.0;
     const double begin = 0.0;
-    const double end = avium_array_length(a) - 1.0;
+    const double end = avium_array_length(a, 3) - 1.0;
     const double step = 1.0;
     i = begin;
 

@@ -1,17 +1,13 @@
 #include "texts.h"
 
+#include "errors.h"
+
 #include <ctype.h>
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-static void text_error(unsigned line, const char* message)
-{
-    fprintf(stderr, "%u: %s\n", line, message);
-    exit(EXIT_FAILURE);
-}
 
 static avium_text empty_text(void)
 {
@@ -25,11 +21,11 @@ static avium_text empty_text(void)
 avium_text avium_text_create(const char* data, size_t length, unsigned line)
 {
     if( length == SIZE_MAX )
-        text_error(line, "Տեքստը չափազանց երկար է։");
+        avium_runtime_error(line, "Տեքստը չափազանց երկար է։");
 
     char* copy = malloc(length + 1);
     if( copy == NULL )
-        text_error(line, "Տեքստի համար հիշողություն հատկացնել չհաջողվեց։");
+        avium_runtime_error(line, "Տեքստի համար հիշողություն հատկացնել չհաջողվեց։");
 
     if( length != 0 )
         memcpy(copy, data, length);
@@ -70,15 +66,15 @@ void avium_text_move_assign(avium_text* target, avium_text* source)
 avium_text avium_text_concat(avium_text left, avium_text right, unsigned line)
 {
     if( left.length > SIZE_MAX - right.length )
-        text_error(line, "Տեքստը չափազանց երկար է։");
+        avium_runtime_error(line, "Տեքստը չափազանց երկար է։");
 
     const size_t length = left.length + right.length;
     if( length == SIZE_MAX )
-        text_error(line, "Տեքստը չափազանց երկար է։");
+        avium_runtime_error(line, "Տեքստը չափազանց երկար է։");
 
     char* data = malloc(length + 1);
     if( data == NULL )
-        text_error(line, "Տեքստի համար հիշողություն հատկացնել չհաջողվեց։");
+        avium_runtime_error(line, "Տեքստի համար հիշողություն հատկացնել չհաջողվեց։");
 
     if( left.length != 0 )
         memcpy(data, left.data, left.length);
@@ -111,14 +107,18 @@ avium_text avium_str(double value, unsigned line)
 {
     const int length = snprintf(NULL, 0, "%.17g", value);
     if( length < 0 )
-        text_error(line, "REAL արժեքը տեքստի փոխարկել չհաջողվեց։");
+        avium_runtime_error(line, "REAL արժեքը տեքստի փոխարկել չհաջողվեց։");
 
     const size_t size = (size_t)length + 1;
     char* data = malloc(size);
     if( data == NULL )
-        text_error(line, "Տեքստի համար հիշողություն հատկացնել չհաջողվեց։");
+        avium_runtime_error(line, "Տեքստի համար հիշողություն հատկացնել չհաջողվեց։");
 
-    snprintf(data, size, "%.17g", value);
+    const int written = snprintf(data, size, "%.17g", value);
+    if( written != length ) {
+        free(data);
+        avium_runtime_error(line, "REAL արժեքը տեքստի փոխարկել չհաջողվեց։");
+    }
     return (avium_text){
         .data = data,
         .length = (size_t)length,
@@ -133,8 +133,7 @@ double avium_num(avium_text value, unsigned line)
     errno = 0;
     const double result = strtod(copy.data, &end);
 
-    while( (size_t)(end - copy.data) < copy.length
-        && isspace((unsigned char)*end) )
+    while( (size_t)(end - copy.data) < copy.length && isspace((unsigned char)*end) )
         ++end;
 
     const bool has_value = end != copy.data;
@@ -143,7 +142,7 @@ double avium_num(avium_text value, unsigned line)
     avium_text_destroy(&copy);
 
     if( !valid )
-        text_error(line, "Տեքստը REAL արժեք չի ներկայացնում։");
+        avium_runtime_error(line, "Տեքստը REAL արժեք չի ներկայացնում։");
     return result;
 }
 
