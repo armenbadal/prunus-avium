@@ -154,26 +154,19 @@ bool SemanticAnalyzer::analyze(Program& program)
 
 void SemanticAnalyzer::visit(Program& program)
 {
-    Subroutine* main = nullptr;
-    for( const auto& subroutine : program._subroutines ) {
-        if( subroutine->_name != "Main" )
-            continue;
-
-        if( main == nullptr )
-            main = subroutine.get();
-    }
-
-    if( main == nullptr ) {
-        report(program, "Ծրագիրը պետք է ունենա ճիշտ մեկ 'Main' ենթածրագիր։");
-    }
+    auto si = std::ranges::find_if(program._subroutines, [](const auto& sub) { return sub->_name == "Main"; });
+    if( si == program._subroutines )
+        report(program, "Main ենթածրագիրը բացակայում է։");
     else {
-        _model.setEntryPoint(*_model.symbol(main->id()));
+        Subroutine* main = si->get();
 
         if( !main->_parameters.empty() )
             report(*main, "'Main' ենթածրագիրը պարամետրեր չի կարող ունենալ։");
 
         if( main->_returnType )
             report(*main, "'Main' ենթածրագիրը արժեք չի կարող վերադարձնել։");
+
+        _model.setEntryPoint(*_model.symbol(main->id()));
     }
 
     for( const auto& subroutine : program._subroutines )
@@ -182,7 +175,17 @@ void SemanticAnalyzer::visit(Program& program)
 
 void SemanticAnalyzer::visit(Subroutine& subroutine)
 {
-    analyzeSubroutine(subroutine);
+    _symbols.openScope();
+    _currentReturnType = subroutine._returnType.get();
+    declareParameters(subroutine);
+    declareLocals(*subroutine._body);
+    visit(*subroutine._body);
+
+    if( subroutine._name != "Main" && _currentReturnType != nullptr && !definitelyReturns(*subroutine._body) )
+        report(subroutine, std::format("'{}' ֆունկցիայի ոչ բոլոր կատարման ուղիներն են արժեք վերադարձնում։", subroutine._name));
+
+    _currentReturnType = nullptr;
+    _symbols.closeScope();
 }
 
 void SemanticAnalyzer::visit(Sequence& sequence)
@@ -193,9 +196,12 @@ void SemanticAnalyzer::visit(Sequence& sequence)
 
 void SemanticAnalyzer::visit(Dim& dim)
 {
+    // եթե զանգվածի սահմանում չէ, ապա ստուգելու բան չկա.
+    // շարահյուսական վերլուծիչը երաշխավորում է ճիշտ DIM հանգույցը
     if( !dim._type->isArray() )
         return;
 
+    // ? սուգել այս բլոկը, parser-ը երաշխավորում է, որ զանգվածի չափը տրվաշ լինիի
     const auto& array = static_cast<ArrayType&>(*dim._type);
     if( !array._size ) {
         report(dim, "Զանգվածի չափը նշված չէ։");
@@ -353,7 +359,8 @@ void SemanticAnalyzer::visit(Return& statement)
 
 void SemanticAnalyzer::visit(Boolean& boolean)
 {
-    _model.setType(boolean.id(), scalarType(ScalarType::Name::Bool));
+    //_model.setType(boolean.id(), scalarType(ScalarType::Name::Bool));
+    _model.setType(boolean.id(), ScalarType{ScalarType::Name::Bool, boolean.line});
 }
 
 void SemanticAnalyzer::visit(Number& number)
@@ -545,21 +552,6 @@ void SemanticAnalyzer::declareSubroutines(const Program& program)
     }
 }
 
-void SemanticAnalyzer::analyzeSubroutine(Subroutine& subroutine)
-{
-    _symbols.openScope();
-    _currentReturnType = subroutine._returnType.get();
-    declareParameters(subroutine);
-    declareLocals(*subroutine._body);
-    visit(*subroutine._body);
-
-    if( subroutine._name != "Main" && _currentReturnType != nullptr && !definitelyReturns(*subroutine._body) )
-        report(subroutine, std::format("'{}' ֆունկցիայի ոչ բոլոր կատարման ուղիներն են արժեք վերադարձնում։", subroutine._name));
-
-    _currentReturnType = nullptr;
-    _symbols.closeScope();
-}
-
 void SemanticAnalyzer::declareParameters(const Subroutine& subroutine)
 {
     for( const auto& parameter : subroutine._parameters ) {
@@ -650,8 +642,7 @@ std::optional<SymbolId> SemanticAnalyzer::resolveVariable(const Variable& variab
     return id;
 }
 
-std::optional<SymbolId> SemanticAnalyzer::resolveSubroutine(const Node& node,
-    std::string_view name)
+std::optional<SymbolId> SemanticAnalyzer::resolveSubroutine(const Node& node, std::string_view name)
 {
     const auto id = _symbols.lookupSubroutine(name);
     if( !id.has_value() ) {
@@ -663,9 +654,7 @@ std::optional<SymbolId> SemanticAnalyzer::resolveSubroutine(const Node& node,
     return id;
 }
 
-void SemanticAnalyzer::validateArguments(const Node& node, std::string_view name,
-    const std::vector<Expression::Ptr>& arguments,
-    const SubroutineSignature& signature)
+void SemanticAnalyzer::validateArguments(const Node& node, std::string_view name, const std::vector<Expression::Ptr>& arguments, const SubroutineSignature& signature)
 {
     const auto expectedCount = signature.parameters.size();
     const auto actualCount = arguments.size();

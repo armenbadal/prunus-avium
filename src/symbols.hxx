@@ -15,19 +15,19 @@ namespace avium {
 using SymbolId = std::uint32_t;
 inline constexpr SymbolId UnknownSymbol = 0;
 
-// Հանդիպում են երկու անուններ. փոփոխական, որը կարող է նաև 
-// զանգված նշանակել, և ենթածրագիր
-enum class SymbolKind : std::uint8_t {
-    Variable,
-    Subroutine,
+// Անունը ծրագում կարող է ունենալ երկու դեր, փոփոխական, որը 
+// կարող է նաև զանգված նշանակել, և ենթածրագիր
+enum class SymbolKind {
+    Variable,   // փոփոխական
+    Subroutine, // ենթածրագիր
 };
 
-// Փոփոխականի դերերը
-enum class VariableStorage : std::uint8_t {
-    Local,
-    Parameter,
-    ForVariable,
-    Builtin,
+// Ենթածրագրի մարմնում փոփոխականի պահպանման դերը
+enum class VariableStorage {
+    Local,        // DIM-ով բացահայտ հայտարարված
+    Parameter,    // պարամետր
+    ForVariable,  // FOR-ի պարամետր, անբացահայտ REAL
+    Builtin,      // ներդրված ենթածրագիր
 };
 
 // Ենթածրագրի նկարագրությունը
@@ -40,13 +40,14 @@ struct SubroutineSignature {
 
 // Ծրագրում հանդիպող անունի նկարագրիչը որպես ինքնուրույն սիմվոլ
 struct Symbol {
-    SymbolId id{UnknownSymbol};
-    SymbolKind kind{SymbolKind::Variable};
+    SymbolId id{UnknownSymbol};  // եզակի իդենտիֆիկատոր
+    SymbolKind kind{SymbolKind::Variable};  // դերը
     std::string name;
     const Type* type{};
     VariableStorage storage{VariableStorage::Local};
     std::optional<SubroutineSignature> subroutine;
 };
+
 
 class SymbolTable {
 public:
@@ -59,11 +60,12 @@ public:
     SymbolTable(const SymbolTable&) = delete;
     SymbolTable& operator=(const SymbolTable&) = delete;
 
+    // սկսել նոր անունների տիրույթ
     void openScope();
+    // վերադառնալ նախորդ անունների տիրույթին
     bool closeScope();
 
-    SymbolId declareVariable(std::string name, const Type& type,
-        VariableStorage storage = VariableStorage::Local);
+    SymbolId declareVariable(std::string name, const Type& type, VariableStorage storage = VariableStorage::Local);
     SymbolId declareSubroutine(SubroutineSignature signature);
 
     std::optional<SymbolId> lookup(std::string_view name) const;
@@ -74,6 +76,7 @@ public:
     std::size_t size() const noexcept;
 
 private:
+    // անունների տիրույթը որպես արտապատկերում
     using Scope = std::unordered_map<std::string, SymbolId>;
 
     SymbolId insert(Symbol symbol, Scope& scope);

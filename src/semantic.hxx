@@ -60,7 +60,6 @@ public:
 private:
     void declareBuiltins();
     void declareSubroutines(const Program& program);
-    void analyzeSubroutine(Subroutine& subroutine);
     void declareParameters(const Subroutine& subroutine);
     void declareLocals(const Sequence& sequence);
     void declareDim(const Dim& dim);
