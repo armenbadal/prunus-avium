@@ -89,17 +89,17 @@ std::optional<double> constantReal(const Expression& expression)
     }
 }
 
-const std::vector<SubroutineSignature>& builtinSignatures()
+const std::vector<SubroutineSymbol>& builtinSubroutines()
 {
     const auto& real = scalarType(ScalarType::Name::Real);
     const auto& text = scalarType(ScalarType::Name::Text);
-    static const std::vector<SubroutineSignature> signatures{
-        {"Print", {nullptr}, nullptr, true},
-        {"Input", {}, &text, true},
-        {"NUM", {&text}, &real, true},
-        {"SQR", {&real}, &real, true},
+    static const std::vector<SubroutineSymbol> subroutines{
+        {"Print", {{nullptr}, nullptr}, true},
+        {"Input", {{}, &text}, true},
+        {"NUM", {{&text}, &real}, true},
+        {"SQR", {{&real}, &real}, true},
     };
-    return signatures;
+    return subroutines;
 }
 
 } // namespace
@@ -360,8 +360,8 @@ void NameResolutionPass::visit(Apply& apply)
 
 void NameResolutionPass::declareBuiltins()
 {
-    for( const auto& signature : builtinSignatures() )
-        _symbols.declareSubroutine(signature);
+    for( const auto& subroutine : builtinSubroutines() )
+        _symbols.declareSubroutine(subroutine);
 }
 
 void NameResolutionPass::declareSubroutines(const Program& program)
@@ -374,15 +374,16 @@ void NameResolutionPass::declareSubroutines(const Program& program)
 
         const auto existing = _symbols.lookupSubroutine(subroutine->_name);
         if( existing ) {
-            const auto& symbol = _symbols.symbol(*existing);
-            if( symbol.subroutine->builtin )
+            const auto* symbol = _symbols.subroutine(*existing);
+            if( symbol->builtin )
                 report(*subroutine, std::format("'{}' անունը պատկանում է ներդրված ենթածրագրի։", subroutine->_name));
             else
                 report(*subroutine, std::format("'{}' ենթածրագիրն արդեն սահմանված է։", subroutine->_name));
             continue;
         }
 
-        const auto id = _symbols.declareSubroutine({subroutine->_name, std::move(parameters), subroutine->_returnType.get(), false});
+        const auto id = _symbols.declareSubroutine(
+            {subroutine->_name, {std::move(parameters), subroutine->_returnType.get()}});
         _model.bind(subroutine->id(), id);
     }
 }
@@ -461,9 +462,9 @@ void NameResolutionPass::declareForVariable(const For& loop)
     const auto& name = loop._parameter->_name;
     if( _symbols.declaredInCurrentScope(name) ) {
         const auto id = *_symbols.lookup(name);
-        const auto& symbol = _symbols.symbol(id);
+        const auto* symbol = _symbols.variable(id);
         _model.bind(loop._parameter->id(), id);
-        if( symbol.kind != SymbolKind::Variable || !hasScalarType(symbol.type, ScalarType::Name::Real) )
+        if( symbol == nullptr || !hasScalarType(symbol->type, ScalarType::Name::Real) )
             report(loop, std::format("FOR-ի '{}' հաշվիչը պետք է լինի պարզ REAL փոփոխական։", name));
         return;
     }
@@ -480,8 +481,7 @@ std::optional<SymbolId> NameResolutionPass::resolveVariable(const Variable& vari
         return std::nullopt;
     }
 
-    const auto& symbol = _symbols.symbol(*id);
-    if( symbol.kind != SymbolKind::Variable ) {
+    if( _symbols.variable(*id) == nullptr ) {
         report(variable, std::format("'{}' անունը փոփոխական չէ։", variable._name));
         return std::nullopt;
     }
@@ -575,8 +575,8 @@ void TypeCheckingPass::visit(Let& let)
     if( !target.has_value() )
         return;
 
-    const auto& symbol = _symbols.symbol(*target);
-    const auto& declaredType = *symbol.type;
+    const auto* symbol = _symbols.variable(*target);
+    const auto& declaredType = *symbol->type;
     const auto arrayTarget = declaredType.isArray();
     const Type& targetType = let._index && arrayTarget ? declaredType.base() : declaredType;
     bool validTarget = true;
@@ -666,10 +666,10 @@ void TypeCheckingPass::visit(Call& call)
     if( !id.has_value() )
         return;
 
-    const auto& signature = *_symbols.symbol(*id).subroutine;
-    if( signature.returnType )
+    const auto& subroutine = *_symbols.subroutine(*id);
+    if( subroutine.signature.returnType )
         report(call, "CALL-ով կարելի է կանչել միայն պրոցեդուրա։");
-    validateArguments(call, call._callee, call._arguments, signature);
+    validateArguments(call, call._callee, call._arguments, subroutine.signature);
 }
 
 void TypeCheckingPass::visit(Return& statement)
@@ -706,7 +706,7 @@ void TypeCheckingPass::visit(Variable& variable)
 {
     const auto id = boundVariable(variable);
     if( id.has_value() )
-        _model.setType(variable.id(), *_symbols.symbol(*id).type);
+        _model.setType(variable.id(), *_symbols.variable(*id)->type);
 }
 
 void TypeCheckingPass::visit(Unary& unary)
@@ -842,12 +842,12 @@ void TypeCheckingPass::visit(Apply& apply)
     if( !id.has_value() )
         return;
 
-    const auto& signature = *_symbols.symbol(*id).subroutine;
-    if( !signature.returnType )
+    const auto& subroutine = *_symbols.subroutine(*id);
+    if( !subroutine.signature.returnType )
         report(apply, std::format("'{}' ենթածրագիրը արժեք չի վերադարձնում։", apply._callee));
     else
-        _model.setType(apply.id(), *signature.returnType);
-    validateArguments(apply, apply._callee, apply._arguments, signature);
+        _model.setType(apply.id(), *subroutine.signature.returnType);
+    validateArguments(apply, apply._callee, apply._arguments, subroutine.signature);
 }
 
 std::optional<SymbolId> TypeCheckingPass::boundVariable(const Variable& variable)
@@ -856,11 +856,11 @@ std::optional<SymbolId> TypeCheckingPass::boundVariable(const Variable& variable
     if( !id )
         return std::nullopt;
 
-    const auto& symbol = _symbols.symbol(*id);
-    if( symbol.kind != SymbolKind::Variable )
+    const auto* symbol = _symbols.variable(*id);
+    if( symbol == nullptr )
         return std::nullopt;
 
-    _model.setType(variable.id(), *symbol.type);
+    _model.setType(variable.id(), *symbol->type);
     return id;
 }
 
@@ -870,8 +870,7 @@ std::optional<SymbolId> TypeCheckingPass::boundSubroutine(const Node& node)
     if( !id )
         return std::nullopt;
 
-    const auto& symbol = _symbols.symbol(*id);
-    return symbol.kind == SymbolKind::Subroutine ? id : std::nullopt;
+    return _symbols.subroutine(*id) != nullptr ? id : std::nullopt;
 }
 
 void TypeCheckingPass::validateArguments(const Node& node, std::string_view name, const std::vector<Expression::Ptr>& arguments, const SubroutineSignature& signature)
