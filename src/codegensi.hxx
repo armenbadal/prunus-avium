@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ast.hxx"
+#include "astvisitor.hxx"
 #include "semantic.hxx"
 #include "symbols.hxx"
 
