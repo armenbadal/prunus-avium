@@ -139,5 +139,5 @@ TEST_CASE("All bundled examples follow the Cherry grammar", "[parser][examples]"
         CHECK(result.diagnostics.count() == 0);
         ++count;
     }
-    CHECK(count == 19);
+    CHECK(count == 20);
 }
