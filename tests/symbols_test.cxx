@@ -15,8 +15,10 @@ TEST_CASE("SymbolTable declares and resolves variables", "[symbols]")
     REQUIRE(id != UnknownSymbol);
     CHECK(symbols.lookup("value") == id);
     CHECK(symbols.declaredInCurrentScope("value"));
-    CHECK(symbols.symbol(id).type == &realType);
-    CHECK(symbols.symbol(id).kind == SymbolKind::Variable);
+    REQUIRE(symbols.variable(id) != nullptr);
+    CHECK(symbols.variable(id)->type == &realType);
+    CHECK(symbols.subroutine(id) == nullptr);
+    CHECK(symbols.symbol(id).name == "value");
 }
 
 TEST_CASE("SymbolTable rejects duplicate declarations in one scope", "[symbols]")
@@ -52,22 +54,23 @@ TEST_CASE("Subroutine lookup ignores a same-named local variable", "[symbols]")
 {
     SymbolTable symbols;
     ScalarType realType{ScalarType::Name::Real, 1};
-    const auto subroutine = symbols.declareSubroutine({"Value", {}, &realType, false});
+    const auto subroutine = symbols.declareSubroutine({"Value", {{}, &realType}});
     symbols.openScope();
     const auto variable = symbols.declareVariable("Value", realType);
 
     CHECK(symbols.lookup("Value") == variable);
     CHECK(symbols.lookupSubroutine("Value") == subroutine);
-    REQUIRE(symbols.symbol(subroutine).subroutine.has_value());
-    CHECK(symbols.symbol(subroutine).type == &realType);
-    CHECK(symbols.symbol(subroutine).subroutine->returnType == &realType);
+    REQUIRE(symbols.subroutine(subroutine) != nullptr);
+    CHECK(symbols.subroutine(subroutine)->signature.returnType == &realType);
+    CHECK(symbols.variable(subroutine) == nullptr);
 }
 
 TEST_CASE("Procedure symbols have no value type", "[symbols]")
 {
     SymbolTable symbols;
-    const auto id = symbols.declareSubroutine({"Work", {}, nullptr, false});
+    const auto id = symbols.declareSubroutine({"Work", {{}, nullptr}});
 
     REQUIRE(id != UnknownSymbol);
-    CHECK(symbols.symbol(id).type == nullptr);
+    REQUIRE(symbols.subroutine(id) != nullptr);
+    CHECK(symbols.subroutine(id)->signature.returnType == nullptr);
 }
