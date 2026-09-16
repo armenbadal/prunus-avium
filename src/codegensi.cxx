@@ -14,6 +14,17 @@ std::string temporaryName(std::string_view type)
     return std::format("avium_temp_{}_{}", type, ++index);
 }
 
+bool producesOwnedText(const avium::Expression& expression)
+{
+    if( expression.kind == avium::NodeKind::Apply )
+        return true;
+    if( expression.kind != avium::NodeKind::Binary )
+        return false;
+
+    const auto& binary = static_cast<const avium::Binary&>(expression);
+    return binary._operation == avium::Operation::Conc;
+}
+
 } // namespace
 
 namespace avium {
@@ -25,6 +36,16 @@ CodeGeneratorSi::CodeGeneratorSi(Program& program, const SemanticModel& model)
 
 CodeGeneratorSi::~CodeGeneratorSi()
 {}
+
+void CodeGeneratorSi::emitCleanup()
+{
+    for( auto object = _localObjects.rbegin(); object != _localObjects.rend(); ++object ) {
+        if( object->kind == LocalKind::Text )
+            _out << "avium_text_destroy(&" << object->name << ");\n";
+        else
+            _out << "avium_array_destroy(" << object->name << ");\n";
+    }
+}
 
 bool CodeGeneratorSi::generate(std::filesystem::path p)
 {
@@ -68,6 +89,8 @@ void CodeGeneratorSi::visit(Sequence& q)
 
 void CodeGeneratorSi::visit(Subroutine& s)
 {
+    _localObjects.clear();
+
     if( s._returnType )
         visit(*s._returnType);
     else
@@ -81,10 +104,12 @@ void CodeGeneratorSi::visit(Subroutine& s)
         visit(*parameter->_type);
         _out << ' ' << parameter->_name;
     }
-    _out << ") ";
-
-    visit(*s._body);
-    _out << '\n';
+    _out << ") {\n";
+    for( auto& statement : s._body->_items )
+        visit(*statement);
+    if( !s._returnType )
+        emitCleanup();
+    _out << "\n}\n\n";
 }
 
 void CodeGeneratorSi::visit(Dim& d)
@@ -100,6 +125,7 @@ void CodeGeneratorSi::visit(Dim& d)
         _out << ", ";
         visit(*t._size);
         _out << ", " << d.line << ");";
+        _localObjects.push_back({d._name, LocalKind::Array});
     }
     else {
         visit(static_cast<ScalarType&>(*d._type));
@@ -116,19 +142,25 @@ void CodeGeneratorSi::visit(Dim& d)
                 break;
         }
         _out << ';';
+        if( d._type->base()._name == ScalarType::Name::Text )
+            _localObjects.push_back({d._name, LocalKind::Text});
     }
     _out << '\n';
 }
 
 void CodeGeneratorSi::visit(Let& l)
 {
+    const auto& target = _model.type(l._variable->id());
+    const auto& base = target->base();
     if( l._index ) {
-        const auto& target = _model.type(l._variable->id());
-        const auto& base = target->base();
         if( base._name == ScalarType::Name::Text ) {
             const auto temporary = temporaryName("text");
             _out << "{\navium_text " << temporary << " = ";
+            if( !producesOwnedText(*l._value) )
+                _out << "avium_text_copy(";
             visit(*l._value);
+            if( !producesOwnedText(*l._value) )
+                _out << ", " << l.line << ')';
             _out << ";\navium_text_move_assign(avium_text_array_at(";
             visit(*l._variable);
             _out << ", ";
@@ -149,6 +181,21 @@ void CodeGeneratorSi::visit(Let& l)
         _out << ";\n";
         return;
     }
+
+    if( base._name == ScalarType::Name::Text ) {
+        const auto temporary = temporaryName("text");
+        _out << "{\navium_text " << temporary << " = ";
+        if( !producesOwnedText(*l._value) )
+            _out << "avium_text_copy(";
+        visit(*l._value);
+        if( !producesOwnedText(*l._value) )
+            _out << ", " << l.line << ')';
+        _out << ";\navium_text_move_assign(&";
+        visit(*l._variable);
+        _out << ", &" << temporary << ");\n}\n";
+        return;
+    }
+
     visit(*l._variable);
     if( l._index ) {
         _out << '[';
@@ -170,7 +217,34 @@ void CodeGeneratorSi::visit(For&) {}
 
 void CodeGeneratorSi::visit(Call&) {}
 
-void CodeGeneratorSi::visit(Return&) {}
+void CodeGeneratorSi::visit(Return& statement)
+{
+    const auto type = _model.type(statement._value->id());
+    const auto& base = type->base();
+    const auto temporary = temporaryName("return");
+
+    switch( base._name ) {
+        case ScalarType::Name::Real:
+            _out << "double ";
+            break;
+        case ScalarType::Name::Text:
+            _out << "avium_text ";
+            break;
+        case ScalarType::Name::Bool:
+            _out << "bool ";
+            break;
+    }
+    _out << temporary << " = ";
+    if( base._name == ScalarType::Name::Text && !producesOwnedText(*statement._value) )
+        _out << "avium_text_copy(";
+    visit(*statement._value);
+    if( base._name == ScalarType::Name::Text && !producesOwnedText(*statement._value) )
+        _out << ", " << statement.line << ')';
+    _out << ";\n";
+
+    emitCleanup();
+    _out << "return " << temporary << ";\n";
+}
 
 void CodeGeneratorSi::visit(Apply& a)
 {

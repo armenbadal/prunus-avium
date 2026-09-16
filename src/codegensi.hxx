@@ -9,6 +9,7 @@
 #include <map>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace avium {
 
@@ -44,11 +45,24 @@ public:
     void visit(Boolean&);
 
 private:
+    enum class LocalKind {
+        Text,
+        Array,
+    };
+
+    struct LocalObject {
+        std::string name;
+        LocalKind kind;
+    };
+
+    void emitCleanup();
+
     Program& _program;
     const SemanticModel& _model;
 
     std::ostringstream _out;
     std::map<std::string, std::string> _textLiterals;
+    std::vector<LocalObject> _localObjects;
 };
 
 } // namespace avium

@@ -49,3 +49,26 @@ add_executable(${PROJECT_NAME}-codegen-e2e "${codegen_e2e_source}")
 target_link_libraries(${PROJECT_NAME}-codegen-e2e PRIVATE avium::runtime)
 
 add_test(NAME ${PROJECT_NAME}.codegen.e2e COMMAND ${PROJECT_NAME}-codegen-e2e)
+
+set(codegen_return_directory "${CMAKE_CURRENT_BINARY_DIR}/codegen-return")
+set(codegen_return_input "${codegen_return_directory}/return.bas")
+set(codegen_return_source "${codegen_return_directory}/return.c")
+file(MAKE_DIRECTORY "${codegen_return_directory}")
+
+add_custom_command(
+    OUTPUT "${codegen_return_source}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/return.bas"
+        "${codegen_return_input}"
+    COMMAND $<TARGET_FILE:prunus> "${codegen_return_input}"
+    DEPENDS
+        prunus
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/return.bas"
+    WORKING_DIRECTORY "${codegen_return_directory}"
+    COMMENT "Generating C code for the return end-to-end test"
+    VERBATIM)
+
+add_executable(${PROJECT_NAME}-codegen-return "${codegen_return_source}")
+target_link_libraries(${PROJECT_NAME}-codegen-return PRIVATE avium::runtime)
+
+add_test(NAME ${PROJECT_NAME}.codegen.return COMMAND ${PROJECT_NAME}-codegen-return)
