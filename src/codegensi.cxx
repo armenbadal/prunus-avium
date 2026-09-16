@@ -1,42 +1,40 @@
 #include "codegensi.hxx"
 
 #include <fstream>
+#include <string_view>
 
 namespace {
 
-std::string temporatyName()
+std::string temporatyName(std::string_view type)
 {
     static unsigned int index = 0;
-    return std::format("avium_temp_{}", ++index);
+    return std::format("avium_temp_{}_{}", type, ++index);
 }
 
 } // namespace
 
 namespace avium {
 
-CodeGeneratorSi::CodeGeneratorSi()
+CodeGeneratorSi::CodeGeneratorSi(Program& program, const SemanticModel& model)
+    : _program{program}, _model{model}
 {}
 
 CodeGeneratorSi::~CodeGeneratorSi()
 {}
 
-bool CodeGeneratorSi::generate(Program& program, const SymbolTable& symbols, const SemanticModel& model)
+bool CodeGeneratorSi::generate(std::filesystem::path p)
 {
-    (void)symbols;
-    _model = &model;
+    if( std::ofstream f{p}; f )
+        f << _out.str() << '\n';
+
     _out.str({});
     _out.clear();
     _out << "#include \"runtime/arrays.h\"\n";
     _out << "#include \"runtime/io.h\"\n";
     _out << "#include \"runtime/texts.h\"\n\n";
     visit(program);
-    return true;
-}
 
-void CodeGeneratorSi::save(std::filesystem::path p)
-{
-    if( std::ofstream f{p}; f )
-        f << _out.str() << '\n';
+    return true;
 }
 
 void CodeGeneratorSi::visit(Program& p)
@@ -214,6 +212,7 @@ void CodeGeneratorSi::visit(Binary& b)
         _out << ", " << b.line << ')';
         return;
     }
+
     _out << '(';
     visit(*b._left);
     switch( b._operation ) {
@@ -272,8 +271,9 @@ void CodeGeneratorSi::visit(Variable& v)
 
 void CodeGeneratorSi::visit(Text& t)
 {
-    _out << "avium_text_create(\"" << t._value << "\", sizeof(\""
-         << t._value << "\") - 1, " << t.line << ')';
+    if( !_textLiterals.contains(t._value) )
+        _textLiterals[t._value] = temporaryName("text");
+    _out << _textLiterals[t._value];
 }
 
 void CodeGeneratorSi::visit(Number& n)

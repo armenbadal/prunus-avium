@@ -7,18 +7,19 @@
 
 #include <filesystem>
 #include <sstream>
+#include <string>
+#include <unordered_map>
 
 namespace avium {
 
 class CodeGeneratorSi : public ASTVisitor<CodeGeneratorSi> {
 public:
-    CodeGeneratorSi();
+    CodeGeneratorSi(Program& program, const SemanticModel& model);
     ~CodeGeneratorSi();
 
     using ASTVisitor<CodeGeneratorSi>::visit;
 
-    bool generate(Program& program, const SymbolTable& symbols, const SemanticModel& model);
-    void save(std::filesystem::path p);
+    bool generate(std::filesystem::path p);
 
 public:
     void visit(Program& p);
@@ -43,8 +44,11 @@ public:
     void visit(Boolean&);
 
 private:
+    const Program& _program;
+    const SemanticModel& _model;
+
     std::ostringstream _out;
-    const SemanticModel* _model{};
+    std::unordered_map<std::string, std::string> _textLiterals;
 };
 
 } // namespace avium
