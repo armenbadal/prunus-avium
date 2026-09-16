@@ -6,9 +6,9 @@
 #include "symbols.hxx"
 
 #include <filesystem>
+#include <map>
 #include <sstream>
 #include <string>
-#include <unordered_map>
 
 namespace avium {
 
@@ -44,11 +44,11 @@ public:
     void visit(Boolean&);
 
 private:
-    const Program& _program;
+    Program& _program;
     const SemanticModel& _model;
 
     std::ostringstream _out;
-    std::unordered_map<std::string, std::string> _textLiterals;
+    std::map<std::string, std::string> _textLiterals;
 };
 
 } // namespace avium

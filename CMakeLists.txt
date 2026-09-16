@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 4.2)
 
-project(prunus VERSION 0.0.1 LANGUAGES CXX)
+project(prunus VERSION 0.0.1 LANGUAGES C CXX)
+
+include(CTest)
+
+add_subdirectory(runtime)
 
 add_executable(${PROJECT_NAME}
     src/main.cxx
@@ -13,7 +17,5 @@ add_executable(${PROJECT_NAME}
     src/astlisp.cxx
     src/codegensi.cxx)
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)
-
-include(CTest)
 
 add_subdirectory(tests)

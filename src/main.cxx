@@ -59,9 +59,13 @@ int main(int argc, char* argv[])
     }
 
     ///avium::AstLisp{}.emit(*program, std::cout);
-    avium::CodeGeneratorSi codegen;
-    codegen.generate(*program, symbols, model);
-    codegen.save("test-output.c");
+    auto output = source;
+    output.replace_extension(".c");
+    avium::CodeGeneratorSi codegen{*program, model};
+    if( !codegen.generate(output) ) {
+        std::cerr << output.string() << ": ֆայլը գրել չհաջողվեց։\n";
+        return EXIT_FAILURE;
+    }
 
     return EXIT_SUCCESS;
 }
