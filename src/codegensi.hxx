@@ -6,6 +6,7 @@
 #include "symbols.hxx"
 
 #include <filesystem>
+#include <iosfwd>
 #include <map>
 #include <sstream>
 #include <string>
@@ -55,7 +56,13 @@ private:
         LocalKind kind;
     };
 
-    void emitCleanup();
+    void emitIncludes(std::ostream& output) const;
+    void emitTextLiterals(std::ostream& output) const;
+    void emitDefaultValue(const Type& type);
+    void emitArguments(const std::vector<Expression::Ptr>& arguments);
+    void emitStoredText(Expression& expression, Position line);
+    void emitTextAssignment(Let& statement);
+    void emitLocalCleanup();
 
     Program& _program;
     const SemanticModel& _model;
