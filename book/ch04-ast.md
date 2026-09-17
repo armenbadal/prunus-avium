@@ -10,7 +10,7 @@
 
 Դիտարկենք մի փոքր Կեռաս ծրագիր.
 
-```basic
+```cerasus
 SUB Square(value AS REAL) AS REAL
     RETURN value^2
 END SUB
@@ -424,7 +424,7 @@ public:
 `_callee` դաշտը կիրառվող ֆունկցիայի անունն է, իսկ `_arguments`-ը՝ արգումենտների
 արտահայտությունների ցուցակը։ Օրինակ,
 
-```basic
+```cerasus
 SQR(a^2 + b^2)
 ```
 
@@ -520,7 +520,7 @@ public:
 
 Օրինակ,
 
-```basic
+```cerasus
 DIM names[10] AS TEXT
 ```
 
@@ -529,13 +529,13 @@ DIM names[10] AS TEXT
 արտահայտությունը։ Չափը հենց արտահայտություն է, որովհետև Կեռասում թույլատրելի է
 նաև այսպիսի հայտարարում.
 
-```basic
+```cerasus
 DIM values[count * 2] AS REAL
 ```
 
 Պարամետրի զանգվածը չափ չունի.
 
-```basic
+```cerasus
 SUB PrintAll(values[] AS TEXT)
     ' ...
 END SUB
@@ -655,13 +655,13 @@ public:
 
 Պարզ վերագրման դեպքում `_index`-ը դատարկ է.
 
-```basic
+```cerasus
 LET total = 42
 ```
 
 Իսկ զանգվածի տարրին վերագրելիս այն պահում է ինդեքսի արտահայտությունը.
 
-```basic
+```cerasus
 LET names[index + 1] = "Cherry"
 ```
 
@@ -942,7 +942,7 @@ std::string AstLisp::visit(Binary& node)
 
 Դիտարկենք հետևյալ ծրագիրը.
 
-```basic
+```cerasus
 SUB Main
     DIM result AS REAL
     LET result = 1 + 2

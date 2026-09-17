@@ -1,0 +1,18 @@
+---
+title:
+  - type: main
+    text: Ինտերպրետատոր
+  - type: subtitle
+    text: ալգորիթմական լեզվի իրականացումը՝ մի մեծ վարժություն
+creator:
+  - role: author
+    text: Արմեն Բադալյան
+identifier:
+  - scheme: DOI
+    text: doi:10.234234.234/33
+lang: hy-AM
+publisher: Հեղինակային հրատարակություն
+rights: © 2026 Արմեն Բադալյան
+ibooks:
+  version: 0.0.1
+...

@@ -7,7 +7,7 @@
 
 Դիտարկենք մի պարզ ծրագիր.
 
-```basic
+```cerasus
 SUB Main
     DIM radius AS REAL
     LET radius = 2.5
@@ -537,7 +537,7 @@ END SUB
 
 Պարամետրն ունի անուն, ընտրովի դատարկ `[]` նշում և պարտադիր տիպ։ Օրինակ.
 
-```basic
+```cerasus
 SUB Find(needle AS TEXT, values[] AS TEXT) AS BOOL
     ' ...
 END SUB
@@ -613,7 +613,7 @@ Dim = 'DIM' IDENT [ '[' Expression ']' ] 'AS' TypeName.
 `parseDim()`-ը `DIM` բառից հետո կանչում է `parseDeclaration()` մեթոդը։
 Վերջինս կարդում է անունը, ընտրովի զանգվածային չափն ու պարտադիր տիպը։
 
-```basic
+```cerasus
 DIM count AS REAL
 DIM names[10] AS TEXT
 DIM flags[count + 1] AS BOOL
@@ -636,7 +636,7 @@ Let = 'LET' IDENT [ '[' Expression ']' ] '=' Expression.
 `parseLet()`-ը պահում է հրամանի տողը, կարդում նպատակային անունը, ընտրովի
 ինդեքսը, `=` նշանը և աջ կողմի արտահայտությունը։
 
-```basic
+```cerasus
 LET total = total + value
 LET values[index + 1] = 0
 ```
@@ -745,7 +745,7 @@ void Parser::parseBlockEnd(Token keyword)
 Ենթածրագրի կանչը Կեռասում երկու շարահյուսական ձև ունի։ Պրոցեդուրան կանչվում է
 `CALL` հրամանով՝ առանց փակագծերի.
 
-```basic
+```cerasus
 CALL Print "Hello!"
 CALL Move x, y
 CALL Reset
@@ -759,7 +759,7 @@ CALL Reset
 Ֆունկցիայի կիրառումը հրաման չէ, այլ արտահայտություն և գրվում է
 փակագծերով.
 
-```basic
+```cerasus
 LET line = Input()
 LET maximum = Max(left, right)
 ```
@@ -817,7 +817,7 @@ Return = 'RETURN' Expression.
 
 Դիտարկենք այս արտահայտությունը.
 
-```basic
+```cerasus
 1 + 2 * 3 OR FALSE
 ```
 
@@ -1018,7 +1018,7 @@ void Parser::synchronize(
 
 Դիտարկենք անավարտ վերագրումը.
 
-```basic
+```cerasus
 LET result =
 ```
 

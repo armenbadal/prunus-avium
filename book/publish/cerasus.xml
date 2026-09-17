@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<language name="cerasus"  version="1" kateversion="5.0" section="Sources" extensions="*.bal" mimetype="text/x-bal" author="Custom" license="MIT" casesensitive="1">
+    <highlighting>
+        <list name="keywords">
+            <item>SUB</item>
+            <item>END</item>
+            <item>DIM</item>
+            <item>LET</item>
+            <item>INPUT</item>
+            <item>PRINT</item>
+            <item>IF</item>
+            <item>THEN</item>
+            <item>ELSEIF</item>
+            <item>ELSE</item>
+            <item>WHILE</item>
+            <item>FOR</item>
+            <item>EACH</item>
+            <item>TO</item>
+            <item>STEP</item>
+            <item>IN</item>
+            <item>DO</item>
+            <item>LOOP</item>
+            <item>UNTIL</item>
+            <item>CALL</item>
+            <item>RETURN</item>
+            <item>OPEN</item>
+            <item>READ</item>
+            <item>WRITE</item>
+            <item>APPEND</item>
+            <item>AS</item>
+            <item>CLOSE</item>
+            <item>TRUE</item>
+            <item>FALSE</item>
+            <item>LIBRARY</item>
+            <item>IMPORT</item>
+        </list>
+
+        <list name="builtins">
+            <item>ABS</item>
+            <item>MID</item>
+            <item>SQR</item>
+            <item>STR</item>
+            <item>LEN</item>
+        </list>
+
+        <list name="operators">
+            <item>+</item>
+            <item>-</item>
+            <item>*</item>
+            <item>/</item>
+            <item>\</item>
+            <item>^</item>
+            <item>=</item>
+            <item>&amp;</item>
+            <item>&lt;&gt;</item>
+            <item>&lt;</item>
+            <item>&lt;=</item>
+            <item>&gt;</item>
+            <item>&gt;=</item>
+            <item>OR</item>
+            <item>AND</item>
+            <item>NOT</item>
+        </list>
+
+        <contexts>
+            <context name="Normal" attribute="Normal Text" lineEndContext="#stay">
+                <DetectChar attribute="Comment" char="'" context="Comment"/>
+                <keyword attribute="Keyword" context="#stay" String="keywords"/>
+                <keyword attribute="BuiltIn" context="#stay" String="builtins"/>
+                <keyword attribute="Operator" context="#stay" String="operators"/>
+                <RegExpr attribute="Number" context="#stay" String="\b\d+(\.\d+)?\b"/>
+                <RegExpr attribute="Identifier" context="#stay" String="\b[A-Za-z][A-Za-z0-9_]*\b"/>
+            </context>
+            <context name="Comment" attribute="Comment" lineEndContext="#pop"/>
+        </contexts>
+
+        <itemDatas>
+            <itemData name="Normal Text" defStyleNum="dsNormal"/>
+            <itemData name="Keyword" defStyleNum="dsKeyword"/>
+            <itemData name="BuiltIn" defStyleNum="dsBuiltIn"/>
+            <itemData name="Identifier" defStyleNum="dsIdentifier"/>
+            <itemData name="Number" defStyleNum="dsDecVal"/>
+            <itemData name="Operator" defStyleNum="dsOperator"/>
+            <itemData name="Comment" defStyleNum="dsComment"/>
+        </itemDatas>
+    </highlighting>
+
+    <general>
+        <comments>
+            <comment name="Line" start="'"/>
+        </comments>
+    </general>
+</language>
