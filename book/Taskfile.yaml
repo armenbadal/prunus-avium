@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: "3"
+
+vars:
+  NOW: '{{now | date "02012006"}}'
+  MODE: "draft"
+  COLOUR: "black"
+
+tasks:
+  default:
+    desc: build the book PDF draft
+    cmds:
+      - task: build-pdf
+        vars:
+          MODE: "draft"
+  full:
+    desc: build the book PDF full
+    cmds:
+      - task: build-pdf
+        vars:
+          MODE: "full"
+
+  build-pdf:
+    internal: true
+    desc: build the book PDF
+    cmds:
+      - |
+        pandoc \
+          ch01-introduction.md \
+          ch02-language.md \
+          ch03-compiler.md \
+          ch04-ast.md \
+          ch05-parsing.md \
+          ch06-semantic.md \
+          ch07-llvm-ir.md \
+          ch08-running.md \
+          ch09-projects.md \
+          --standalone \
+          --syntax-definition=publish/cerasus.xml \
+          --syntax-highlighting=publish/tango-black-white.theme \
+          --pdf-engine=xelatex \
+          --template=publish/book-template.latex \
+          --variable {{.MODE}} \
+          --variable {{.COLOUR}} \
+          --lua-filter=publish/ebnf.lua \
+          --top-level-division=chapter \
+          --output 'compiler_book_{{.MODE}}_{{.NOW}}.pdf'
+
+  build-images:
+    dir: images
+    cmds:
+      - task
