@@ -46,7 +46,7 @@ TypeName = 'BOOL' | 'REAL' | 'TEXT'.
 վերադարձվող արժեքի տիպը պարտադիր չեն։ Օրինակ, կարելի է գրել պարամետրեր 
 չունեցող ֆունկցիա.
 
-```basic
+```cerasus
 SUB RandomNumber AS REAL
   ' հաշվել մի պատահական թիվ
 END SUB
@@ -54,7 +54,7 @@ END SUB
 
 Կամ կարելի է սահմանել պրոցեդուրա.
 
-```basic
+```cerasus
 SUB PrintDate
   ' տպել այսօրվա ամսաթիվը
 END SUB
@@ -64,7 +64,7 @@ END SUB
 հրամանը, որի մասին կխոսենք ստորև։ Օրինակ, երկու թիվ գումարող ֆունկցիան
 կսահմանվի.
 
-```basic
+```cerasus
 SUB Add(x AS REAL, y AS REAL) AS REAL
   RETURN x + y
 END SUB
@@ -235,13 +235,13 @@ Factor = 'TRUE' | 'FALSE' | NUMBER | STRING
 
 Եթե զանգվածը հայտարարվել է, օրինակ, հետևյալ կերպ․
 
-```basic
+```cerasus
 DIM a[3] AS TEXT
 ```
 
 Եվ ունենք ենթածրագիր-պրոցեդուրա, որի պարամետրը զանգված է, օրինակ․
 
-```basic
+```cerasus
 SUB PrintTexts(x[] AS TEXT)
   ' արտածել տեքստերը
 END SUB
@@ -293,7 +293,7 @@ END SUB
 ենթածրագրերով։ `Print`-ը արտածման ստանդարտ հոսքին է դուրս 
 բերում իրեն տրված արտահայտության արժեքը։ Օրինակ.
 
-```basic
+```cerasus
 CALL Print "Ok"
 CALL Print 3.1415^2
 ```
@@ -302,7 +302,7 @@ CALL Print 3.1415^2
 ներմուծման հոսքից տրված տեքստը։ Օգտագործողի գործն է այն ձևափոխել
 այլ տիպի։ Օրինակ.
 
-```basic
+```cerasus
 DIM s AS TEXT
 LET s = Input()
 DIM n AS REAL
@@ -334,7 +334,7 @@ LET n = NUM(Input())
 անունով նոր սահմանում, ապա օգտագործվում է հենց դա։ Հակառակ
 դեպքում `FOR`-ը ներմուծում է նոր `REAL` փոփոխական։ Օրինակ.
 
-```basic
+```cerasus
 DIM j AS REAL
 ' ....
 FOR j = 1 TO 12 STEP 2
@@ -345,7 +345,7 @@ END FOR
 Այստեղ `FOR`-ը նոր `j` չի սահմանում ու օգտագործում է արդեն
 բացահայտ սահմանվածը։ Մի այլ դեպք.
 
-```basic
+```cerasus
 ' ուրիշ i սահմանված չէ
 FOR i = 12 TO 2 STEP -2
   ' ...
@@ -360,7 +360,7 @@ END FOR
 դրական, ամբողջ արժեք ունեցող `REAL`-ի։ Ակնհայտորեն հետևյալ օրինակում
 `r`-ը սահմանվում է որպես 6 տեքստերի զանգված։
 
-```basic
+```cerasus
 DIM pi AS REAL
 LET pi = 3.1415
 DIM r[2 * pi] AS TEXT

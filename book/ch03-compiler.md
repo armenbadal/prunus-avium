@@ -25,7 +25,7 @@
 
 Դիտարկենք Կեռասով գրված մի փոքր ծրագիր․
 
-```basic
+```cerasus
 SUB Square(value AS REAL) AS REAL
     RETURN value^2
 END SUB
@@ -179,7 +179,7 @@ AST-ն ու `SemanticModel`-ը սահմանագծի վրա գտնվող ընդհ
 
 Օրինակ՝
 
-```basic
+```cerasus
 LET result = 10
 ```
 
@@ -219,7 +219,7 @@ Scanner + Diagnostics --Parser::parse()--> Program AST
 
 Դիտարկենք վերագրման հրամանը․
 
-```basic
+```cerasus
 LET result = value + 1
 ```
 
@@ -294,7 +294,7 @@ AST-ի հանգույցներն ու դրանց սեփականության կա�
 Քերականորեն ճիշտ ծրագիրը դեռ պարտադիր չէ, որ իմաստ ունենա։ Հետևյալ տեքստը,
 օրինակ, ճիշտ կառուցված Կեռաս ծրագիր է․
 
-```basic
+```cerasus
 SUB Main
     DIM result AS REAL
     LET result = "հինգ"
@@ -372,7 +372,7 @@ Program + SymbolTable + SemanticModel
 զուգահեռ փորձարկվում է `CodeGeneratorSi` դասը, որը նույն AST-ից Սի կոդ է
 արտածում։ Օրինակ, Կեռասի
 
-```basic
+```cerasus
 LET result = left + right
 ```
 

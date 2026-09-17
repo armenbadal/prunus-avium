@@ -5,7 +5,7 @@
 շարահյուսությունը։ Բայց շարահյուսորեն ճիշտ ամեն մի ծրագիր դեռ պարտադիր չէ, որ
 իմաստ ունենա։ Դիտարկենք մի պարզ օրինակ.
 
-```basic
+```cerasus
 SUB Main
     DIM r AS REAL
     DIM t AS TEXT
@@ -156,7 +156,7 @@ _ծածկման_ սովորական կանոնն է։
 Ենթածրագրերի համար սահմանված է առանձին `lookupSubroutine()` մեթոդ։ Ինչո՞ւ չի
 բավականացնում սովորական որոնումը։ Դիտարկենք այսպիսի ֆունկցիա.
 
-```basic
+```cerasus
 SUB Sum(Sum AS REAL, value AS REAL) AS REAL
     IF Sum = 0 THEN
         RETURN value
@@ -184,7 +184,7 @@ END SUB
 
 Դիտարկենք հետևյալ երկու հրամանները.
 
-```basic
+```cerasus
 DIM radius AS REAL
 LET radius = 12.5
 ```
@@ -236,7 +236,7 @@ private:
 գրանցել և տեղում ստուգել տիպերը։ Բայց այդ պարզ սխեման բավարար չէ։ Կեռասում
 ենթածրագիրը կարելի է կանչել իր հայտարարումից առաջ.
 
-```basic
+```cerasus
 SUB Main
     CALL Show
 END SUB
@@ -316,7 +316,7 @@ void NameResolutionPass::visit(Program& program)
 պրոցեդուրա և պարամետրեր չունենա։ Այսինքն՝ ընդունելի է միայն հետևյալ ընդհանուր
 ձևը.
 
-```basic
+```cerasus
 SUB Main
     ' ծրագրի հրամանները
 END SUB
@@ -352,7 +352,7 @@ void NameResolutionPass::visit(Subroutine& subroutine)
 
 Օրինակ, հետևյալ ծրագրում `value` անունը ճանաչելի է նաև հայտարարումից առաջ.
 
-```basic
+```cerasus
 SUB Main
     LET value = 7
     IF TRUE THEN
@@ -378,7 +378,7 @@ END SUB
 `FOR`-ի հաշվիչն առանձնահատուկ անուն է, որովհետև այն կարելի է նախապես
 չհայտարարել.
 
-```basic
+```cerasus
 FOR index = 0 TO 10
     CALL Print index
 END FOR
@@ -502,7 +502,7 @@ const Type* TypeCheckingPass::expressionType(Expression& expression)
 արտահայտություն է, ապա վերլուծիչը նաև հաշվում է դրա արժեքը և պահանջում, որ
 այն լինի վերջավոր, դրական ամբողջ թիվ։
 
-```basic
+```cerasus
 DIM first[10] AS TEXT          ' ճիշտ է
 DIM second[2 + 3 * 4] AS REAL ' նույնպես ճիշտ է
 DIM third[-1] AS BOOL         ' սխալ է
@@ -545,7 +545,7 @@ DIM fourth[2.5] AS REAL       ' սխալ է
 արտահայտությունը պետք է լինի պարզ արժեք, իսկ նրա տիպը պետք է համընկնի
 ֆունկցիայի հայտարարած վերադարձվող տիպին։ Օրինակ.
 
-```basic
+```cerasus
 SUB Positive(value AS REAL) AS BOOL
     RETURN value > 0
 END SUB
@@ -557,7 +557,7 @@ END SUB
 է համարվում միայն այն դեպքում, երբ ունի `ELSE` ճյուղ, և իր բոլոր `IF`,
 `ELSEIF` ու `ELSE` ճյուղերն էլ երաշխավորված արժեք են վերադարձնում։
 
-```basic
+```cerasus
 SUB Sign(value AS REAL) AS TEXT
     IF value < 0 THEN
         RETURN "negative"
