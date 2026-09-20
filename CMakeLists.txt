@@ -14,8 +14,7 @@ add_executable(${PROJECT_NAME}
     src/parser.cxx
     src/symbols.cxx
     src/semantic.cxx
-    src/astlisp.cxx
-    src/codegensi.cxx)
+    src/astlisp.cxx)
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)
 
 add_subdirectory(tests)

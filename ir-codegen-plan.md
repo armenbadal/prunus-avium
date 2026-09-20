@@ -45,7 +45,7 @@ Scanner → Parser → AST → SemanticAnalyzer
        unsigned line);
    ```
 
-   Սա միաժամանակ պարզեցնում է LLVM և ապագա C backend-ները և հարթակից կախված ABI lowering չի պահանջում։
+   Սա պարզեցնում է LLVM backend-ը և հարթակից կախված ABI lowering չի պահանջում։
 
 2. **Հստակեցնել builtin-ների ցանկը։**  
    Semantic analyzer-ը հիմա ճանաչում է `Print`, `Input`, `NUM`, `SQR`, մինչդեռ runtime-ը և օրինակները նաև նախատեսում են `STR` ու `LEN`։ Առաջարկում եմ `SubroutineSymbol`-ում `bool builtin`-ի փոխարեն ունենալ `BuiltinKind`, որպեսզի generator-ը builtin-ը ճանաչի semantic identity-ով, ոչ թե անվան տողը համեմատելով։

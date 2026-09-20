@@ -1,7 +1,6 @@
 #include "astlisp.hxx"
 #include "parser.hxx"
 #include "semantic.hxx"
-#include "codegensi.hxx"
 
 #include <cstdlib>
 #include <filesystem>
@@ -58,14 +57,7 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    ///avium::AstLisp{}.emit(*program, std::cout);
-    auto output = source;
-    output.replace_extension(".c");
-    avium::CodeGeneratorSi codegen{*program, model};
-    if( !codegen.generate(output) ) {
-        std::cerr << output.string() << ": ֆայլը գրել չհաջողվեց։\n";
-        return EXIT_FAILURE;
-    }
+    avium::AstLisp{}.emit(*program, std::cout);
 
     return EXIT_SUCCESS;
 }
