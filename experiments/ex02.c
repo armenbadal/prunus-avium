@@ -13,7 +13,8 @@ void avium_g(avium_array* a, avium_array* b)
 
     while( i <= end ) {
         const avium_text* source = avium_text_array_at(b, i, 3);
-        avium_text value = avium_text_concat(*source, avium_literal_copy, 3);
+        avium_text value;
+        avium_text_concat(&value, source, &avium_literal_copy, 3);
         avium_text* target = avium_text_array_at(a, i, 3);
         avium_text_move_assign(target, &value);
         i = i + step;
@@ -22,12 +23,12 @@ void avium_g(avium_array* a, avium_array* b)
 
 void avium_Main()
 {
-    avium_array *x = avium_array_create(AVIUM_ARRAY_TEXT, 2, 8);
-    avium_text *p = avium_text_array_at(x, 0, 9);
+    avium_array* x = avium_array_create(AVIUM_ARRAY_TEXT, 2, 8);
+    avium_text* p = avium_text_array_at(x, 0, 9);
     p = &avium_literal_One;
     p = avium_text_array_at(x, 1, 10);
     p = &avium_literal_Two;
 
-    avium_array *y = avium_array_create(AVIUM_ARRAY_TEXT, 2, 12);
+    avium_array* y = avium_array_create(AVIUM_ARRAY_TEXT, 2, 12);
     avium_g(x, y);
 }

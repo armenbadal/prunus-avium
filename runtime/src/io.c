@@ -26,15 +26,20 @@ void avium_print_real(double value, unsigned line)
     finish_output(line);
 }
 
-void avium_print_text(avium_text value, unsigned line)
+void avium_print_text(const avium_text* value, unsigned line)
 {
-    if( value.length != 0 && fwrite(value.data, 1, value.length, stdout) != value.length )
+    if( value == NULL )
+        avium_runtime_error(line, "Արտածվող տեքստի հասցեն դատարկ է։");
+    if( value->length != 0 && fwrite(value->data, 1, value->length, stdout) != value->length )
         avium_runtime_error(line, "Արժեքն արտածել չհաջողվեց։");
     finish_output(line);
 }
 
-avium_text avium_input(unsigned line)
+void avium_input(avium_text* result, unsigned line)
 {
+    if( result == NULL )
+        avium_runtime_error(line, "Տեքստի արդյունքի հասցեն դատարկ է։");
+
     size_t capacity = 64;
     size_t length = 0;
     char* data = malloc(capacity);
@@ -67,7 +72,7 @@ avium_text avium_input(unsigned line)
     if( length != 0 && data[length - 1] == '\r' )
         --length;
     data[length] = '\0';
-    return (avium_text){
+    *result = (avium_text){
         .data = data,
         .length = length,
         .owned = true,

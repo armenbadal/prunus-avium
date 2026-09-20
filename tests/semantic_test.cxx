@@ -157,7 +157,7 @@ TEST_CASE("Semantic analyzer rejects duplicate subroutine names", "[semantic]")
 
 TEST_CASE("Semantic analyzer reserves builtin subroutine names", "[semantic]")
 {
-    for( const auto name : {"Print", "Input", "NUM"} ) {
+    for( const auto name : {"Print", "Input", "NUM", "SQR", "STR", "LEN"} ) {
         DYNAMIC_SECTION(name)
         {
             auto main = subroutine("Main");
@@ -998,6 +998,12 @@ TEST_CASE("Semantic analyzer accepts builtin subroutine signatures", "[semantic]
             NodeList<Expression>{node<Number>(1.0, 2)}, 2);
         const auto stringResult = analyzeExpression(std::move(string), ScalarType::Name::Text);
         CHECK(stringResult.valid);
+
+        auto booleanString = node<Apply>("STR",
+            NodeList<Expression>{node<Boolean>(true, 2)}, 2);
+        const auto booleanStringResult = analyzeExpression(
+            std::move(booleanString), ScalarType::Name::Text);
+        CHECK(booleanStringResult.valid);
     }
 
     SECTION("LEN accepts text and arrays")
@@ -1069,7 +1075,7 @@ TEST_CASE("Semantic analyzer rejects calls that violate builtin signatures", "[s
         CHECK(result.errors.size() == 1);
     }
 
-    SECTION("STR accepts arrays")
+    SECTION("STR rejects arrays")
     {
         auto items = test::arrayDeclaration(
             "items", node<Number>(2.0, 2), ScalarType::Name::Text, 2);
@@ -1080,8 +1086,18 @@ TEST_CASE("Semantic analyzer rejects calls that violate builtin signatures", "[s
             std::move(string), 3);
         const auto analysis = analyze({subroutineWithBody(
             "Main", {std::move(items), std::move(result), std::move(assignment)})});
-        CHECK(analysis.valid);
-        CHECK(analysis.errors.empty());
+        CHECK_FALSE(analysis.valid);
+        CHECK(analysis.errors.size() == 1);
+    }
+
+    SECTION("STR rejects text")
+    {
+        auto string = node<Apply>("STR",
+            NodeList<Expression>{node<Text>("text", 2)}, 2);
+        const auto result = analyzeExpression(
+            std::move(string), ScalarType::Name::Text);
+        CHECK_FALSE(result.valid);
+        CHECK(result.errors.size() == 1);
     }
 
     SECTION("call kind")
