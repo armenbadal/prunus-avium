@@ -1,6 +1,16 @@
-Կարդացի `main` ճյուղը։ Ոչ մի ֆայլ չեմ փոփոխել, աշխատանքային ծառը մաքուր է։
+# LLVM IR գեներացիայի աշխատանքային պլան
 
-Առաջարկվող ընդհանուր հոսքը սա է՝
+## Նպատակը
+
+Սեմանտիկորեն վավեր `Program` AST-ից կառուցել ստուգված LLVM IR։ Գեներատորը
+անուններ կամ տիպեր նորից չի լուծում․ այն օգտագործում է նույն `SymbolTable`-ն ու
+`SemanticModel`-ը, որոնցով ծրագիրը վերլուծվել է։ Սխալ կամ չվերլուծված AST-ի
+փոխանցումը ծրագրավորման սխալ է։
+
+Առաջին նպատակը ընթեռնելի `.ll` ֆայլ ստանալն է։ Object file-ի ստեղծումը,
+runtime-ի հետ կապակցումն ու executable-ի գործարկումը կավելացվեն վավեր IR
+գեներացիայից հետո։ Ամեն փուլ պետք է ավարտվի աշխատող build-ով և համապատասխան
+թեստերով։
 
 ```text
 Scanner → Parser → AST → SemanticAnalyzer
@@ -16,177 +26,317 @@ Scanner → Parser → AST → SemanticAnalyzer
                  avium-runtime
 ```
 
-## Ներկա վիճակը
+## Repository-ի ներկա վիճակը
 
-- [main.cxx](/home/armen/Projects/prunus-avium/src/main.cxx:42)-ում ամբողջ frontend pipeline-ն արդեն հավաքված է։ Semantic analysis-ից հետո հիմա արտածվում է միայն AST-ի Lisp տեսքը։
-- [SemanticModel](/home/armen/Projects/prunus-avium/src/semantic.hxx:13)-ն արդեն պահում է IR generator-ին անհրաժեշտ հիմնական կապերը՝ `NodeId → SymbolId`, expression type և entry point։
-- [SymbolTable](/home/armen/Projects/prunus-avium/src/symbols.hxx:58)-ը տարբերակում է local/parameter/FOR փոփոխականներն ու ենթածրագրերը։
-- AST-ն ընդգրկում է բոլոր անհրաժեշտ control-flow հանգույցները, զանգվածները, կանչերն ու վերադարձը։
-- [runtime ABI-ի նախագիծը](/home/armen/Projects/prunus-avium/runtime/design.md:25) լավ հիմք է ownership-ի և զանգվածների վարքի համար։
-- Top-level [CMakeLists.txt](/home/armen/Projects/prunus-avium/CMakeLists.txt:1)-ը դեռ LLVM-ն ու runtime-ը չի միացնում։
-- Համակարգում առկա է LLVM 21.1.8։
-- `book/ch07-llvm-ir.md`-ը դեռ դատարկ է, այսինքն implementation-ին զուգահեռ այդ գլխի տեխնիկական բովանդակությունն էլ պետք է ձևավորվի։
+- Parser-ը կառուցում է ամբողջ լեզուն ներկայացնող `Program` AST։
+- `SemanticAnalyzer`-ը լուծում է անուններն ու տիպերը և ստուգում կանչերը,
+  control flow-ն ու `RETURN`-ը։
+- `SemanticModel`-ը պահում է `NodeId → SymbolId`, expression type և entry-point
+  կապերը։
+- `SymbolTable`-ը տարբերակում է local, parameter ու `FOR` փոփոխականները և
+  ենթածրագրերը։
+- AST-ն ընդգրկում է անհրաժեշտ control-flow հանգույցները, զանգվածները, կանչերն
+  ու վերադարձը։
+- `avium-runtime`-ը կառուցվում է որպես առանձին C17 static library և
+  իրականացնում է տեքստերը, զանգվածները, I/O-ն, `NUM`, `STR`, `LEN`, `SQR` ու
+  runtime սխալները։
+- Root CMake project-ն արդեն միացնում է C-ն, C++-ը և `runtime/` ենթապանակը,
+  բայց դեռ չի գտնում կամ կապում LLVM-ը։
+- LLVM IR generator դեռ չկա։ Semantic analysis-ից հետո executable-ը հիմա
+  արտածում է AST-ի Lisp տեսքը։
+- `book/ch07-llvm-ir.md`-ը դեռ չի պարունակում backend-ի տեխնիկական
+  նկարագրությունը։
 
-## Նախնական պարտադիր որոշումներ
+## Մինչև generator-ը պարտադիր պայմանավորվածությունները
 
-Սրանք արժե փակել մինչև generator գրելն սկսելը։
+### Runtime ABI
 
-1. **Կայունացնել runtime ABI-ն։**  
-   Ներկա C ABI-ում `avium_text`-ը փոխանցվում է արժեքով։ Clang-ը այս հարթակում այն իջեցնում է `byval` և `sret` ձևերի, հետևաբար LLVM-ում պարզապես `{ ptr, i64, i8 }` տիպով կանչ ստեղծելը ABI-compatible չէ։
+Այս մասը կայունացված է։ Public C ABI-ում `avium_text`-ը երբեք արժեքով չի
+փոխանցվում կամ վերադարձվում։ Runtime-ի մուտքային տեքստերը pointer-ներ են, իսկ
+նոր տեքստ վերադարձնող գործողությունները ստանում են առաջին
+`avium_text* result` պարամետրը։ Այսպես backend-ը չի իրականացնում
+target-specific `byval` կամ `sret` lowering։ Օրինակ՝
 
-   Խորհուրդս՝ aggregate-ների runtime API-ն դարձնել pointer/out-parameter հիմքով, օրինակ՝
+```c
+void avium_input(avium_text* result, unsigned line);
+void avium_text_concat(
+    avium_text* result,
+    const avium_text* left,
+    const avium_text* right,
+    unsigned line);
+```
 
-   ```c
-   void avium_input(avium_text* result, unsigned line);
-   void avium_text_concat(
-       avium_text* result,
-       const avium_text* left,
-       const avium_text* right,
-       unsigned line);
-   ```
+LLVM module-ի runtime հայտարարությունները պետք է ճշգրտորեն կրկնեն
+`runtime/include/*.h`-ի ստորագրությունները։
 
-   Սա պարզեցնում է LLVM backend-ը և հարթակից կախված ABI lowering չի պահանջում։
+### Builtin-ների ինքնությունը
 
-2. **Հստակեցնել builtin-ների ցանկը։**  
-   Semantic analyzer-ը հիմա ճանաչում է `Print`, `Input`, `NUM`, `SQR`, մինչդեռ runtime-ը և օրինակները նաև նախատեսում են `STR` ու `LEN`։ Առաջարկում եմ `SubroutineSymbol`-ում `bool builtin`-ի փոխարեն ունենալ `BuiltinKind`, որպեսզի generator-ը builtin-ը ճանաչի semantic identity-ով, ոչ թե անվան տողը համեմատելով։
+Semantic analyzer-ը ճանաչում է `Print`, `Input`, `NUM`, `SQR`, `STR` և `LEN`
+builtin-ները, ներառյալ `STR(BOOL)` և `LEN(TEXT|array)` տարբերակները։ Մինչև
+codegen-ը ցանկալի է `SubroutineSymbol::builtin` boolean-ը փոխարինել
+`BuiltinKind`-ով։ Այդ դեպքում generator-ը builtin lowering-ը կընտրի semantic
+identity-ով, ոչ թե անվան տողը համեմատելով։
 
-3. **Սահմանել dynamic `DIM`-ի lifecycle-ը։**  
-   Առաջարկվող կանոնը՝ storage-ը ստեղծել ենթածրագրի entry block-ում, բայց զանգվածը հատկացնել հենց `DIM`-ի կատարման պահին։ Եթե նույն `DIM`-ը կրկին կատարվում է ցիկլում, նախ ոչնչացնել հին զանգվածը, ապա ստեղծել նորը։
+### Dynamic `DIM`-ի lifecycle-ը
 
-4. **Սահմանել `TEXT` պարամետրի value semantics-ը։**  
-   Պարզ պարամետրերը փոխանցվում են արժեքով, հետևաբար `TEXT` պարամետրը callee-ի մուտքում պետք է դառնա անկախ պատճեն։ Զանգվածային պարամետրերը մնում են borrowed հղումներ։
+Array slot-ը ստեղծվում է ենթածրագրի entry block-ում, բայց զանգվածը հատկացվում է
+հենց `DIM`-ի կատարման պահին։ Եթե նույն `DIM`-ը կրկին կատարվում է, օրինակ՝
+ցիկլում, նախ ոչնչացվում է հին զանգվածը, ապա ստեղծվում է նորը։ Տեղային զանգվածը
+ոչնչացվում է ենթածրագրից դուրս գալիս, իսկ borrowed array parameter-ը՝ ոչ։
+
+### Cherry ենթածրագրերի ABI-ն
+
+- `REAL` պարամետրն ու վերադարձվող արժեքը LLVM `double` են։
+- `BOOL` պարամետրն ու վերադարձվող արժեքը LLVM `i1` են։
+- `TEXT` պարամետրը փոխանցվում է storage-ի `ptr`-ով։ Callee-ն entry block-ում
+  `avium_text_copy`-ով ստեղծում է անկախ տեղային պատճեն՝ պահպանելով լեզվի value
+  semantics-ը։
+- `TEXT` վերադարձնող ֆունկցիան LLVM-ում վերադարձնում է `void` և առաջին
+  պարամետրով ստանում կանչողի հատկացրած `avium_text* result` storage-ը։ Կանչից
+  առաջ այն գրելի և ownership չունեցող է, իսկ հաջող վերադարձից հետո ownership-ը
+  պատկանում է կանչողին։ Սա Cherry-ի բացահայտ ABI-ն է, ոչ LLVM `sret`։
+- Array parameter-ը borrowed `avium_array*` է և callee-ում չի ոչնչացվում։
 
 ## LLVM տիպերի մոդելը
 
 | Կեռաս | LLVM հաշվարկային տիպ | Պահպանում/runtime |
-|---|---|---|
+| --- | --- | --- |
 | `REAL` | `double` | `double` |
-| `BOOL` | `i1` | ABI սահմանին ցանկալի է ֆիքսված 8-bit ներկայացում |
-| `TEXT` | հասցեով կառավարվող named struct | `avium_text` |
+| `BOOL` | `i1` | Runtime ABI սահմանին ըստ C ստորագրության |
+| `TEXT` | հասցեով կառավարվող `%avium.text = type { ptr, iN, i8 }` | `avium_text` |
 | զանգված | `ptr` | opaque `avium_array*` |
-| procedure | `void` | `void` |
-| `TEXT` վերադարձ | out/sret slot | ownership-ը փոխանցվում է կանչողին |
+| պրոցեդուրա | `void` | `void` |
+| `REAL`/`BOOL` ֆունկցիա | համապատասխան scalar | անմիջական return value |
+| `TEXT` ֆունկցիա | `void` | առաջին `ptr result` պարամետր |
 
-`size_t`-ի լայնությունը պետք է վերցնել module-ի `DataLayout`-ից, ոչ թե ամրագրել որպես `i64`։
+`%avium.text`-ը named, ոչ packed կառուցվածք է։ Դաշտերի ֆիքսված ինդեքսներն են
+`0`՝ `data`, `1`՝ `length`, `2`՝ `owned`։ `iN`-ը թիրախի C ABI-ի `size_t`
+լայնությամբ integer type-ն է և չի ամրագրվում որպես `i64`։ Runtime header-ում
+չկան կառուցվածքի չափը, alignment-ը, field offset-ները կամ `size_t`-ի լայնությունը
+ստուգող compile-time assertions։
+
+`owned`-ի C տիպը `bool` է։ Ընթացիկ աջակցվող C ABI-ում այն memory-ում մեկ բայթ է,
+ուստի LLVM storage-ի դաշտը `i8` է՝ canonical `0` կամ `1` արժեքով, ոչ թե `i1`։
+Struct-ը packed չէ և ձեռքով padding չի ստանում։ Offset-ները, allocation size-ն
+ու ABI alignment-ը հաշվարկվում են `DataLayout::getStructLayout()`-ով, իսկ
+դաշտերը հասցեագրվում են typed GEP-ով։ Սկզբնական backend-ը գեներացնում է միայն
+կապակցվող runtime-ի նույն թիրախի համար։ C layout-ի ու LLVM layout-ի
+համատեղելիությունը պետք է հաստատել առանձին ABI integration test-ով։ Նոր թիրախ
+ավելացնելիս չի կարելի `size_t`-ը կամ C `bool`-ի storage-ը ենթադրել միայն pointer
+width-ից։
+
+Օգտատիրոջ `Main` ենթածրագրի կողքին գեներացվում է C ABI-ի `i32 @main()` wrapper,
+որը կանչում է semantic model-ում նշված entry point-ը և վերադարձնում `0`։ User
+subroutine-ների անունները պետք է անվտանգ mangling ունենան, որպեսզի չբախվեն
+runtime-ի ու համակարգային անուններին։
+
+## Codegen-ի կանոնները
+
+- Generator-ին փոխանցվում է միայն հաջող semantic analysis անցած `Program`-ը՝
+  նույն `SymbolTable`-ի և `SemanticModel`-ի հետ։
+- Անունների լուծումը, տիպերի ստուգումը, `Main`-ի գոյությունն ու
+  ստորագրությունների վավերությունը semantic analyzer-ի պատասխանատվությունն են։
+  Codegen-ը դրանք չի կրկնում և Cherry semantic diagnostic չի ստեղծում։
+- `ScalarType::Name`-ի վավեր արժեքներն են `Bool`, `Real` և `Text`։ Հաջող
+  semantic analysis-ից հետո օգտագործվող ամեն expression ունի կոնկրետ տիպ, իսկ
+  անհնար enum ճյուղերը նշվում են `std::unreachable()`-ով։
+- Parser-ը առանց տիպի `DIM` կամ parameter չի ավելացնում AST-ին, ուստի codegen-ը
+  դրանց տիպի գոյությունը չի ստուգում։
+- AST node-երը, variable storage-ները և callee-ները կապվում են `SymbolId`-ով։
+  Codegen-ը դրանց անունով lookup չի կատարում։ Entry point-ը նույնպես վերցվում է
+  `SemanticModel`-ի `SymbolId`-ով։
+- `SemanticModel`-ի պարտադիր կապերի բացակայությունը generator-ի նախապայմանի
+  խախտում է, ոչ թե աղբյուր ծրագրի diagnostic։
+- Array/scalar և function/procedure տարբերակումները ընտրում են արդեն վավեր
+  հանգույցի LLVM ներկայացումը և semantic ստուգումներ չեն։
+- Ամեն module անցնում է `llvm::verifyModule()`։ Ձախողումը compiler-ի ներքին
+  սխալ է։
+- Մինչև CLI-ի ելքային ռեժիմների իրականացումը հաջող pipeline-ը ամբողջ LLVM IR-ը
+  տպում է `stdout`։
 
 ## Իրականացման փուլերը
 
-1. **Build-ի հիմք**
+### Փուլ 1․ LLVM build և generator-ի արտաքին ինտերֆեյս
 
-   - Root project-ը դարձնել `LANGUAGES C CXX`։
-   - Միացնել `runtime/`-ը `add_subdirectory(runtime)`-ով։
-   - Ավելացնել `find_package(LLVM CONFIG REQUIRED)`։
-   - Compiler-ի frontend աղբյուրները հանել առանձին library target-ի մեջ, որպեսզի executable-ն ու թեստերը նույն target-ը օգտագործեն։
-   - Սկզբնական փուլում կապել միայն LLVM Core/Support բաղադրիչները։
+- CMake-ում ավելացնել `find_package(LLVM CONFIG REQUIRED)` և սկզբում կապել միայն
+  անհրաժեշտ Core/Support բաղադրիչները։
+- Frontend աղբյուրները հանել առանձին library target-ի մեջ, որպեսզի executable-ն
+  ու թեստերը նույն target-ը օգտագործեն։
+- LLVM dependency-ն պահել backend-ի target-ներում, որպեսզի `avium-runtime`-ը
+  շարունակի ինքնուրույն C17 գրադարան կառուցվել։
+- Ավելացնել մոտավորապես՝
 
-2. **Generator-ի կմախք**
+  ```text
+  src/irgenerator.hxx
+  src/irgenerator.cxx
+  src/runtimeabi.hxx
+  src/runtimeabi.cxx
+  ```
 
-   Ավելացնել մոտավորապես՝
+- `IRGenerator`-ի interface-ը պետք է ընդունի `Program`, `SymbolTable`,
+  `SemanticModel` և target configuration։ AST-ը LLVM-specific տվյալներով չի
+  փոփոխվում։ Արդյունքը `std::unique_ptr<llvm::Module>` կամ սխալ ներկայացնող
+  `llvm::Expected` է։
+- Առաջին թեստով դատարկ `Main`-ից ստանալ վավեր module և C entry point։
 
-   ```text
-   src/irgenerator.hxx
-   src/irgenerator.cxx
-   src/runtimeabi.hxx
-   src/runtimeabi.cxx
-   ```
+### Փուլ 2․ module, տիպեր և ստորագրություններ
 
-   `IRGenerator`-ը պետք է ստանա `SymbolTable`, `SemanticModel` և target configuration։ AST-ը չպետք է LLVM-specific տվյալներով փոփոխվի։
+- Նախ սահմանել target triple-ն ու data layout-ը, ապա կառուցել `%avium.text`
+  named struct-ը։ ABI integration test-ով համեմատել C struct-ի field offset-ները,
+  size-ն ու alignment-ը LLVM `StructLayout`-ի արդյունքի հետ։
+- Մեկ տեղում իրականացնել `ScalarType::Name → llvm::Type` փոխակերպումն ու
+  runtime ABI-ի բոլոր LLVM հայտարարությունները։
+- Նախապես հայտարարել user subroutine-ները, որպեսզի աշխատեն forward և recursive
+  կանչերը։ LLVM անունները կառուցել `SymbolId`-ով կամ անվտանգ mangling-ով։
+- Պահել `SymbolId → llvm::Function*` և `SymbolId → Storage` քարտեզները։
+- Գեներացնել C `main` wrapper-ը՝ առանց AST-ում `Main` անունը նորից որոնելու։
+- User subroutine-ի համար ստեղծել entry block, local slot-եր և սկզբնական
+  արժեքներ՝ `FALSE`, `0.0`, դատարկ text և `null` array descriptor։
+- `REAL`/`BOOL` parameter-ները store անել արժեքով, `TEXT` parameter-ը պատճենել
+  փոխանցված հասցեից, իսկ array parameter-ը պահել borrowed reference։
+- `TEXT` return type ունեցող ստորագրությանը ավելացնել առաջին result pointer-ը։
+- Ամեն `RETURN` արժեքը պահում կամ տեղափոխում է return/result storage, ապա անցնում
+  ընդհանուր cleanup block։ Cleanup-ից հետո scalar function-ը կատարում է `ret`,
+  իսկ procedure-ն ու `TEXT` function-ը՝ `ret void`։
+- Թեստավորել procedure, scalar/text parameter ու return, առաջ ուղղված
+  հայտարարում և recursion։
 
-   Արդյունքը պետք է լինի `std::unique_ptr<llvm::Module>` կամ սխալ ներկայացնող `llvm::Expected`։
+### Փուլ 3․ scalar արտահայտություններ և վերագրումներ
 
-3. **Module և հայտարարությունների առաջին անցում**
+- Գեներացնել `BOOL`, `REAL` և text literal-ները։ Text literal-ի բայթերը պահել
+  module-ի private constant storage-ում և կազմել borrowed `%avium.text` handle։
+- Իրականացնել scalar `Variable` load-ը և `LET` store-ը։
+- Իրականացնել unary `+`, `-`, `NOT` գործողությունները։
+- Իրականացնել թվաբանական գործողությունները։ `/`-ը floating-point բաժանում է,
+  `\`-ը՝ դեպի զրո կլորացված քանորդ, `MOD`-ը՝ մնացորդ, `^`-ը՝ runtime/libm
+  `pow` կանչ։
+- Իրականացնել numeric ու boolean equality/comparison-ները։
+- `\`, `MOD`, `^` և floating-point comparison-ների համար առանձին թեստերով
+  ամրագրել `NaN`, infinity և signed zero վարքը։
+- Ամեն ենթափուլի թեստը և՛ verify է անում module-ը, և՛ ստուգում հիմնական
+  instruction-ները։
 
-   - Սահմանել target triple և data layout։
-   - Հայտարարել runtime ֆունկցիաները։
-   - Նախապես հայտարարել բոլոր user subroutine-ները՝ forward call և recursion թույլ տալու համար։
-   - LLVM անունները կառուցել `SymbolId`-ով կամ անվտանգ mangling-ով։
-   - Գեներացնել սովորական C `main`, որը կանչում է semantic model-ում նշված Cherry `Main`-ը և վերադարձնում `0`։
+### Փուլ 4․ control flow
 
-4. **Ֆունկցիաների մարմիններ և storage**
+- `IF`/`ELSEIF`/`ELSE`-ի համար կառուցել condition, branch և merge block-եր։
+  Դատարկ branch-ը նույնպես ճիշտ է ավարտվում, իսկ `RETURN`-ով ավարտված branch-ին
+  երկրորդ terminator չի ավելացվում։
+- `WHILE`-ի համար կառուցել condition, body և exit block-եր։
+- `AND` և `OR` գործողությունները գեներացնել short-circuit branch-երով ու PHI
+  արժեքով, ոչ bitwise instruction-ով։
+- `FOR`-ի begin, end և step expression-ները հաշվարկել ճիշտ մեկ անգամ։ Դրական
+  քայլի դեպքում կիրառել `<=`, բացասականի դեպքում՝ `>=`, ապա մարմնից հետո
+  մեծացնել հաշվիչը։
+- Թեստավորել nested control flow-ը, early return-ը և այն դեպքերը, երբ branch-ը
+  կամ loop body-ն ենթածրագրի վերջին statement-ն է։
 
-   - Բոլոր local slot-երը ստեղծել entry block-ում։
-   - Օգտագործել `SymbolId → Storage` քարտեզ, ոչ թե փոփոխականի անուն։
-   - `REAL`/`BOOL` local-ները սկզբնարժեքավորել։
-   - `TEXT` local-ները սկսել անվտանգ դատարկ արժեքով։
-   - Local array slot-երը սկսել `null`-ով։
-   - Parameter-ների համար կիրառել պարզ արժեքի copy և զանգվածի borrowed-reference կանոնները։
+### Փուլ 5․ user subroutine-ների կանչեր
 
-5. **Արտահայտություններ**
+- `CALL`-ը գեներացնել որպես `void` կանչ։ `REAL`/`BOOL` վերադարձնող `Apply`-ն
+  օգտագործում է call-ի անմիջական արդյունքը։
+- `TEXT` վերադարձնող `Apply`-ի համար caller-ը հատկացնում է դեռ ownership
+  չունեցող temporary storage և այն փոխանցում որպես առաջին result pointer։
+- `REAL`/`BOOL` argument-ները փոխանցել արժեքով, `TEXT` argument-ները՝ storage-ի
+  հասցեով, իսկ array-ները՝ borrowed descriptor pointer-ով։
+- Callee-ն գտնել `SemanticModel`-ի `SymbolId`-ով և ապահովել recursive ու mutual
+  կանչերը։
+- Թեստավորել բազմաթիվ argument-ներ, return value-ն և function result-ի
+  անմիջական օգտագործումն ավելի մեծ expression-ում։
 
-   Հերթականությունը՝
+### Փուլ 6․ runtime, builtin-ներ և `TEXT` ownership
 
-   - literal և variable load,
-   - unary գործողություններ,
-   - թվային arithmetic և comparison,
-   - տեքստային comparison և concatenation,
-   - array indexing runtime-ի typed accessor-ներով,
-   - user և builtin function call,
-   - `AND`/`OR` short-circuit՝ basic block-երով և `phi`-ով։
+- Օգտագործել `runtime/include/*.h`-ում սահմանված C ABI-ն՝ text-ի ստեղծման,
+  պատճենման, տեղափոխման, ոչնչացման, միակցման, համեմատման և input-ի համար։
+- `&`, text `=`, `<>`, `<`, `<=`, `>` և `>=` գործողություններն իջեցնել runtime
+  կանչերի։ Համեմատությունը բովանդակությամբ է, ոչ pointer-ով։
+- Նույն ABI-ով իջեցնել `Input`, `NUM`, `STR`, `LEN` և `SQR` builtin-ները՝ source
+  line փոխանցելով այն runtime ֆունկցիաներին, որոնց ստորագրությունը դա պահանջում
+  է։
+- `Print`-ն ընդունում է միայն `TEXT` և իջեցվում է `avium_print_text` runtime
+  կանչի։ `BOOL` կամ `REAL` արժեք տպելու համար Cherry ծրագիրը նախ օգտագործում է
+  `STR`։
+- Պահպանել `runtime/design.md`-ի ownership պայմանագիրը․
+  - text literal-ը borrowed է,
+  - `Input`, `STR`, concatenation և text-returning function-ը owned արժեք են
+    տալիս,
+  - borrowed RHS-ը variable-ին վերագրելիս կիրառվում է `avium_text_copy`,
+  - owned temporary-ն տեղափոխելիս կիրառվում է `avium_text_move_assign`,
+  - `TEXT` վերադարձնելիս ownership-ը փոխանցվում է caller-ի result storage-ին,
+  - ամեն owned local կամ temporary ոչնչացվում է ճիշտ մեկ անգամ։
+- Cleanup-ում ոչնչացնել local text-երն ու local array-ները, բայց ոչ borrowed
+  array parameter-ները։ Բոլոր `RETURN`-ները տանել նույն cleanup epilogue։
+- Թեստավորել overwrite/self-assignment-ը, owned/borrowed argument-ները, early
+  return-ը և բոլոր control-flow ուղիների cleanup-ը։
 
-   `\`, `MOD`, `^` և floating-point comparison-ների համար պետք է առանձին թեստերով ամրագրել NaN/Infinity վարքը։
+### Փուլ 7․ զանգվածներ և runtime ստուգումներ
 
-6. **Հրամաններ և control flow**
+- `DIM`-ի size expression-ը հաշվարկել ճիշտ մեկ անգամ։ Կրկնակի կատարման դեպքում
+  նախ ոչնչացնել slot-ի հին descriptor-ը, ապա կանչել `avium_array_create`-ը՝
+  element tag-ով ու source line-ով։
+- Չափի ամբողջ, դրական ու ներկայացնելի լինելը, allocation-ը և element-ների
+  սկզբնարժեքավորումը թողնել runtime-ի պայմանագրին։
+- `a[i]`-ի հասցեն ստանալ `avium_text_array_at`, `avium_real_array_at` կամ
+  `avium_bool_array_at` typed accessor-ով։ Runtime-ն է ստուգում descriptor-ը,
+  element type-ը, index-ի ամբողջ լինելն ու սահմանները։
+- Տեղային array-ները ոչնչացնել ենթածրագրից դուրս գալու բոլոր ուղիներում։ Array
+  parameter-ը չոչնչացնել և փոխանցել հղումով, որպեսզի element-ի փոփոխությունը
+  տեսանելի լինի caller-ին։
+- `LEN(array)`-ն իջեցնել runtime-ի array length գործողության։
+- Թեստավորել dynamic և կրկնվող `DIM`, բոլոր element type-երը, parameter-ով
+  փոխանցումը և size/index runtime սխալները։
 
-   - `LET`՝ scalar store կամ text copy/move։
-   - `DIM`՝ array create։
-   - `IF/ELSEIF/ELSE`՝ branch chain և merge block։
-   - `WHILE`՝ condition/body/exit blocks։
-   - `FOR`՝ begin/end/step-ը մեկ անգամ հաշվարկել, այնուհետև քայլի նշանից կախված `<=` կամ `>=` պայման։
-   - `CALL`։
-   - `RETURN`՝ արժեքը տեղափոխել return slot, ապա գնալ ընդհանուր cleanup block։
+### Փուլ 8․ CLI, object file և ամբողջական ինտեգրում
 
-7. **Ownership և cleanup**
+- Սկզբում ավելացնել հստակ IR ռեժիմներ՝
 
-   Սա generator-ի ամենազգայուն մասն է։
+  ```text
+  prunus --emit-ast source.bas
+  prunus --emit-llvm source.bas
+  prunus --emit-llvm -o output.ll source.bas
+  ```
 
-   - Text literal-ը borrowed է։
-   - `Input`, `STR`, concatenation և text-returning function-ը owned արժեք են տալիս։
-   - Borrowed RHS-ը variable-ին վերագրելիս նախ `avium_text_copy`։
-   - Owned temporary-ն վերագրելիս՝ `avium_text_move_assign`։
-   - `TEXT` վերադարձնելիս ownership-ը փոխանցել return slot-ին։
-   - Բոլոր `RETURN`-ները տանել մեկ cleanup epilogue։
-   - Cleanup-ում ոչնչացնել local text-երն ու local array-ները, բայց ոչ array parameter-ները։
-   - Յուրաքանչյուր control-flow ճանապարհով ժամանակավոր owned text-ը պետք է ոչնչացվի ճիշտ մեկ անգամ։
-
-8. **CLI ինտեգրում**
-
-   Սկզբում պահպանել ներկա վարքը և ավելացնել հստակ ռեժիմներ՝
-
-   ```text
-   prunus --emit-ast source.bas
-   prunus --emit-llvm source.bas
-   prunus --emit-llvm -o output.ll source.bas
-   ```
-
-   Object file և executable ստեղծելը թողնել հաջորդ փուլին՝ `--compile` կամ `-c` ռեժիմով։
+- Pipeline-ը դարձնել scanner → parser → semantic analyzer → IR generator →
+  verifier → output։ Parse կամ semantic սխալի դեպքում codegen չգործարկել։
+- Object file ու executable ստեղծելը ավելացնել հաջորդ քայլով՝ `-c` կամ
+  `--compile` ռեժիմով, ապա կապել `avium-runtime`-ի հետ։
+- Բոլոր `examples/*.bas` ֆայլերի համար ավելացնել IR smoke test։ Քանի որ օրինակների
+  մի մասը կարող է դիտավորյալ diagnostic ակնկալել, դրանք բաժանել
+  expected-success և expected-diagnostic խմբերի։
+- Ընտրված փոքր ծրագրերը գործարկել JIT-ով կամ native executable-ով և ստուգել
+  stdout-ը, stderr-ը ու exit status-ը։
+- Implementation-ին զուգահեռ լրացնել `book/ch07-llvm-ir.md`-ը։
 
 ## Թեստավորման ռազմավարություն
 
-- `tests/irgenerator_test.cxx`՝ փոքր AST/program → LLVM module։
-- Ամեն գեներացված module-ի համար պարտադիր `llvm::verifyModule`։
-- IR կառուցվածքային թեստեր՝ function signature, basic block, runtime call, short-circuit։
-- End-to-end թեստեր՝ `.bas → .ll → object → runtime link → execution`։
-- Առանձին դեպքեր՝
-  - early return և cleanup,
-  - text overwrite/self-assignment,
-  - owned/borrowed text argument,
-  - text վերադարձ,
-  - array parameter-ի փոփոխության տեսանելիություն,
-  - invalid size/index runtime error,
-  - դրական և բացասական `FOR STEP`,
-  - short-circuit-ի աջ կողմի չկատարում,
-  - `NaN`, infinity և signed zero,
-  - recursive և forward function call։
+- `tests/irgenerator_test.cxx`՝ փոքր `Program` → LLVM module։
+- Ամեն գեներացված module-ի համար պարտադիր `llvm::verifyModule()`։
+- Կառուցվածքային թեստեր՝ function signature, `%avium.text` layout, basic block,
+  runtime call, PHI և short-circuit։
+- Խուսափել LLVM version-ից կախված մեծ IR snapshot-ներից։ Նախընտրել verifier,
+  կառուցվածքային ստուգումներ և փոքր կայուն IR հատվածներ։
+- End-to-end դեպքեր՝ `.bas → .ll → object → runtime link → execution`։
+- Պարտադիր եզրային դեպքեր՝ early return, text overwrite/self-assignment,
+  owned/borrowed text argument, text return, array parameter mutation, invalid
+  size/index, positive/negative `FOR STEP`, short-circuit-ի չկատարվող աջ կողմ,
+  `NaN`, infinity, signed zero, recursive և forward call։
 - AddressSanitizer/LeakSanitizer end-to-end թեստեր՝ text/array ownership-ի համար։
+- Runtime ABI-ի C թեստերը շարունակել առանձին և ավելացնել սահմանային արժեքների
+  ու error exit-երի դեպքեր։
 
-## Առաջարկվող PR-ների բաժանումը
+## Առաջարկվող փոփոխությունների բաժանումը
 
-1. ABI-ի հստակեցում, builtin registry և runtime compatibility թեստեր։
-2. LLVM/CMake skeleton, type mapping, scalar expressions ու subroutine-ներ։
-3. Control flow և scalar builtins։
-4. `TEXT` ownership և text builtins։
-5. Զանգվածներ ու `LEN`։
+1. `BuiltinKind` և runtime compatibility-ի լրացուցիչ թեստեր։
+2. LLVM/CMake skeleton, target configuration, type mapping և subroutine ABI։
+3. Scalar expression-ներ, control flow ու scalar builtin-ներ։
+4. `TEXT` գործողություններ, ownership, cleanup և text builtin-ներ։
+5. Զանգվածներ, կրկնվող `DIM` և `LEN(array)`։
 6. CLI, object generation, runtime linking և end-to-end թեստեր։
 7. `book/ch07-llvm-ir.md` փաստաթղթավորում։
 
-Այս կառուցվածքով ամենաբարդ մասը՝ ABI-ն ու ownership-ը, լուծվում է սկզբում, իսկ հետագա IR generation-ը դառնում է հիմնականում ուղիղ AST→CFG աշխատանք։
+## Ավարտված լինելու չափանիշները
+
+Պլանը ավարտված է, երբ Cherry-ի բոլոր գործողությունները, control-flow
+կառուցվածքները, user subroutine-ները, builtin-ները և զանգվածները ստանում են
+վավեր LLVM IR, ownership/cleanup-ը ճիշտ է բոլոր կատարման ուղիներում, հաջող
+օրինակները հասնում են codegen ու execution փուլերին, runtime սխալներն ունեն
+կանխատեսելի վարք, իսկ compiler-ի և runtime-ի ամբողջ CTest փաթեթն անցնում է։
