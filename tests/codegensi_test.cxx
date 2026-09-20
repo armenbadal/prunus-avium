@@ -64,7 +64,8 @@ TEST_CASE("C generator initializes scalar declarations", "[codegensi]")
         "static const avium_text avium_empty_text = {\"\", 0, false};"));
     CHECK(output.contains("avium_text message = avium_empty_text;"));
     CHECK(output.contains("bool ready = false;"));
-    CHECK(output.contains("avium_text_copy(avium_empty_text, 5)"));
+    CHECK(output.contains("avium_codegen_text_copy(avium_empty_text, 5)"));
+    CHECK(output.contains("avium_text_copy(&result, &value, line);"));
     CHECK(output.contains("avium_text_move_assign(&message"));
 }
 
@@ -90,7 +91,7 @@ TEST_CASE("C generator emits reusable escaped text values", "[codegensi]")
     const auto firstUse = output.find(literal, initializerPosition + initializer.size());
     REQUIRE(firstUse != std::string::npos);
     CHECK(output.find(literal, firstUse + literal.size()) != std::string::npos);
-    CHECK(output.contains("avium_text_copy("));
+    CHECK(output.contains("avium_codegen_text_copy("));
 }
 
 TEST_CASE("C generator copies stored text values and moves temporary results", "[codegensi]")
@@ -104,11 +105,23 @@ TEST_CASE("C generator copies stored text values and moves temporary results", "
         "LET first = Input()\n"
         "END SUB\n");
 
-    CHECK(output.contains("avium_text_copy(first, 5)"));
-    CHECK(output.contains(" = avium_input(6);"));
-    CHECK_FALSE(output.contains("avium_text_copy(avium_input"));
+    CHECK(output.contains("avium_codegen_text_copy(first, 5)"));
+    CHECK(output.contains(" = avium_codegen_input(6);"));
+    CHECK_FALSE(output.contains("avium_codegen_text_copy(avium_codegen_input"));
     CHECK(output.contains("avium_text_move_assign(&first"));
     CHECK(output.contains("avium_text_move_assign(&second"));
+}
+
+TEST_CASE("C generator converts boolean values to text", "[codegensi]")
+{
+    const auto output = generate(
+        "SUB Main\n"
+        "DIM text AS TEXT\n"
+        "LET text = STR(TRUE)\n"
+        "END SUB\n");
+
+    CHECK(output.contains("avium_codegen_str_bool(true, 3)"));
+    CHECK(output.contains("avium_str_bool(&result, value, line);"));
 }
 
 TEST_CASE("C generator preserves UTF-8 text literals", "[codegensi]")
@@ -151,7 +164,7 @@ TEST_CASE("C generator cleans local objects before returning text", "[codegensi]
         "LET result = Value()\n"
         "END SUB\n");
 
-    const auto copy = output.find("avium_text_copy(local, 4)");
+    const auto copy = output.find("avium_codegen_text_copy(local, 4)");
     const auto cleanup = output.find("avium_text_destroy(&local)", copy);
     const auto returned = output.find("return avium_temp_return_", cleanup);
     REQUIRE(copy != std::string::npos);

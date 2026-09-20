@@ -44,6 +44,57 @@ void CodeGeneratorSi::emitIncludes(std::ostream& output) const
     output << "#include \"texts.h\"\n\n";
 }
 
+void CodeGeneratorSi::emitRuntimeAdapters(std::ostream& output) const
+{
+    output << R"(static inline avium_text avium_codegen_text_copy(avium_text value, unsigned line)
+{
+    avium_text result;
+    avium_text_copy(&result, &value, line);
+    return result;
+}
+
+static inline avium_text avium_codegen_text_concat(avium_text left, avium_text right,
+    unsigned line)
+{
+    avium_text result;
+    avium_text_concat(&result, &left, &right, line);
+    return result;
+}
+
+static inline avium_text avium_codegen_input(unsigned line)
+{
+    avium_text result;
+    avium_input(&result, line);
+    return result;
+}
+
+static inline avium_text avium_codegen_str(double value, unsigned line)
+{
+    avium_text result;
+    avium_str(&result, value, line);
+    return result;
+}
+
+static inline avium_text avium_codegen_str_bool(bool value, unsigned line)
+{
+    avium_text result;
+    avium_str_bool(&result, value, line);
+    return result;
+}
+
+static inline double avium_codegen_num(avium_text value, unsigned line)
+{
+    return avium_num(&value, line);
+}
+
+static inline double avium_codegen_text_length(avium_text value)
+{
+    return avium_text_length(&value);
+}
+
+)";
+}
+
 void CodeGeneratorSi::emitTextLiterals(std::ostream& output) const
 {
     output << "static const avium_text avium_empty_text = {\"\", 0, false};\n";
@@ -82,7 +133,7 @@ void CodeGeneratorSi::emitStoredText(Expression& expression, Position line)
 {
     const auto needsCopy = !producesOwnedText(expression);
     if( needsCopy )
-        _out << "avium_text_copy(";
+        _out << "avium_codegen_text_copy(";
     visit(expression);
     if( needsCopy )
         _out << ", " << line << ')';
@@ -132,6 +183,7 @@ bool CodeGeneratorSi::generate(std::filesystem::path p)
         return false;
 
     emitIncludes(f);
+    emitRuntimeAdapters(f);
     emitTextLiterals(f);
     f << _out.str();
     f << "\nint main(){ avium_Main(); return 0; }\n";
@@ -275,17 +327,19 @@ void CodeGeneratorSi::visit(Return& statement)
 void CodeGeneratorSi::visit(Apply& a)
 {
     if( a._callee == "Input" ) {
-        _out << "avium_input(" << a.line << ')';
+        _out << "avium_codegen_input(" << a.line << ')';
         return;
     }
     if( a._callee == "NUM" ) {
-        _out << "avium_num(";
+        _out << "avium_codegen_num(";
         visit(*a._arguments.front());
         _out << ", " << a.line << ')';
         return;
     }
     if( a._callee == "STR" ) {
-        _out << "avium_str(";
+        const auto argumentType = _model.type(a._arguments.front()->id());
+        const auto boolean = argumentType != nullptr && argumentType->base()._name == ScalarType::Name::Bool;
+        _out << (boolean ? "avium_codegen_str_bool(" : "avium_codegen_str(");
         visit(*a._arguments.front());
         _out << ", " << a.line << ')';
         return;
@@ -294,7 +348,7 @@ void CodeGeneratorSi::visit(Apply& a)
         const auto argumentType = _model.type(a._arguments.front()->id());
         _out << (argumentType != nullptr && argumentType->isArray()
                 ? "avium_array_length("
-                : "avium_text_length(");
+                : "avium_codegen_text_length(");
         visit(*a._arguments.front());
         _out << ')';
         return;
@@ -335,6 +389,15 @@ void CodeGeneratorSi::visit(Binary& b)
             _out << "*avium_real_array_at(";
         else
             _out << "*avium_bool_array_at(";
+        visit(*b._left);
+        _out << ", ";
+        visit(*b._right);
+        _out << ", " << b.line << ')';
+        return;
+    }
+
+    if( b._operation == Operation::Conc ) {
+        _out << "avium_codegen_text_concat(";
         visit(*b._left);
         _out << ", ";
         visit(*b._right);

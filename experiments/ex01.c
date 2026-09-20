@@ -12,7 +12,8 @@ void avium_f(double n)
     i = begin;
 
     while( i <= end ) {
-        avium_text value = avium_str(i, 4);
+        avium_text value;
+        avium_str(&value, i, 4);
         avium_text* target = avium_text_array_at(a, i, 4);
         avium_text_move_assign(target, &value);
         i = i + step;
