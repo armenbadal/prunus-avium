@@ -57,6 +57,7 @@ private:
     };
 
     void emitIncludes(std::ostream& output) const;
+    void emitRuntimeAdapters(std::ostream& output) const;
     void emitTextLiterals(std::ostream& output) const;
     void emitDefaultValue(const Type& type);
     void emitArguments(const std::vector<Expression::Ptr>& arguments);

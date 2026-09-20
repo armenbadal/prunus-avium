@@ -18,8 +18,11 @@ static avium_text empty_text(void)
     };
 }
 
-avium_text avium_text_create(const char* data, size_t length, unsigned line)
+void avium_text_create(avium_text* result, const char* data, size_t length,
+    unsigned line)
 {
+    if( result == NULL )
+        avium_runtime_error(line, "Տեքստի արդյունքի հասցեն դատարկ է։");
     if( length == SIZE_MAX )
         avium_runtime_error(line, "Տեքստը չափազանց երկար է։");
 
@@ -31,16 +34,18 @@ avium_text avium_text_create(const char* data, size_t length, unsigned line)
         memcpy(copy, data, length);
     copy[length] = '\0';
 
-    return (avium_text){
+    *result = (avium_text){
         .data = copy,
         .length = length,
         .owned = true,
     };
 }
 
-avium_text avium_text_copy(avium_text value, unsigned line)
+void avium_text_copy(avium_text* result, const avium_text* value, unsigned line)
 {
-    return avium_text_create(value.data, value.length, line);
+    if( value == NULL )
+        avium_runtime_error(line, "Պատճենվող տեքստի հասցեն դատարկ է։");
+    avium_text_create(result, value->data, value->length, line);
 }
 
 void avium_text_destroy(avium_text* value)
@@ -63,12 +68,17 @@ void avium_text_move_assign(avium_text* target, avium_text* source)
     *source = empty_text();
 }
 
-avium_text avium_text_concat(avium_text left, avium_text right, unsigned line)
+void avium_text_concat(avium_text* result, const avium_text* left,
+    const avium_text* right, unsigned line)
 {
-    if( left.length > SIZE_MAX - right.length )
+    if( result == NULL )
+        avium_runtime_error(line, "Տեքստի արդյունքի հասցեն դատարկ է։");
+    if( left == NULL || right == NULL )
+        avium_runtime_error(line, "Միացվող տեքստի հասցեն դատարկ է։");
+    if( left->length > SIZE_MAX - right->length )
         avium_runtime_error(line, "Տեքստը չափազանց երկար է։");
 
-    const size_t length = left.length + right.length;
+    const size_t length = left->length + right->length;
     if( length == SIZE_MAX )
         avium_runtime_error(line, "Տեքստը չափազանց երկար է։");
 
@@ -76,35 +86,37 @@ avium_text avium_text_concat(avium_text left, avium_text right, unsigned line)
     if( data == NULL )
         avium_runtime_error(line, "Տեքստի համար հիշողություն հատկացնել չհաջողվեց։");
 
-    if( left.length != 0 )
-        memcpy(data, left.data, left.length);
-    if( right.length != 0 )
-        memcpy(data + left.length, right.data, right.length);
+    if( left->length != 0 )
+        memcpy(data, left->data, left->length);
+    if( right->length != 0 )
+        memcpy(data + left->length, right->data, right->length);
     data[length] = '\0';
 
-    return (avium_text){
+    *result = (avium_text){
         .data = data,
         .length = length,
         .owned = true,
     };
 }
 
-int avium_text_compare(avium_text left, avium_text right)
+int avium_text_compare(const avium_text* left, const avium_text* right)
 {
-    const size_t common_length = left.length < right.length ? left.length : right.length;
-    const int comparison = common_length == 0 ? 0 : memcmp(left.data, right.data, common_length);
+    const size_t common_length = left->length < right->length ? left->length : right->length;
+    const int comparison = common_length == 0 ? 0 : memcmp(left->data, right->data, common_length);
 
     if( comparison != 0 )
         return comparison;
-    if( left.length < right.length )
+    if( left->length < right->length )
         return -1;
-    if( left.length > right.length )
+    if( left->length > right->length )
         return 1;
     return 0;
 }
 
-avium_text avium_str(double value, unsigned line)
+void avium_str(avium_text* result, double value, unsigned line)
 {
+    if( result == NULL )
+        avium_runtime_error(line, "Տեքստի արդյունքի հասցեն դատարկ է։");
     const int length = snprintf(NULL, 0, "%.17g", value);
     if( length < 0 )
         avium_runtime_error(line, "REAL արժեքը տեքստի փոխարկել չհաջողվեց։");
@@ -119,16 +131,27 @@ avium_text avium_str(double value, unsigned line)
         free(data);
         avium_runtime_error(line, "REAL արժեքը տեքստի փոխարկել չհաջողվեց։");
     }
-    return (avium_text){
+    *result = (avium_text){
         .data = data,
         .length = (size_t)length,
         .owned = true,
     };
 }
 
-double avium_num(avium_text value, unsigned line)
+void avium_str_bool(avium_text* result, bool value, unsigned line)
 {
-    avium_text copy = avium_text_copy(value, line);
+    const char* text = value ? "TRUE" : "FALSE";
+    const size_t length = value ? 4 : 5;
+    avium_text_create(result, text, length, line);
+}
+
+double avium_num(const avium_text* value, unsigned line)
+{
+    if( value == NULL )
+        avium_runtime_error(line, "Թվային փոխարկման տեքստի հասցեն դատարկ է։");
+
+    avium_text copy;
+    avium_text_copy(&copy, value, line);
     char* end = NULL;
     errno = 0;
     const double result = strtod(copy.data, &end);
@@ -146,7 +169,7 @@ double avium_num(avium_text value, unsigned line)
     return result;
 }
 
-double avium_text_length(avium_text value)
+double avium_text_length(const avium_text* value)
 {
-    return (double)value.length;
+    return (double)value->length;
 }

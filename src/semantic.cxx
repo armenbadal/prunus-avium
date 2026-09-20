@@ -896,8 +896,14 @@ void TypeCheckingPass::validateArguments(const Node& node, std::string_view name
             continue;
         }
 
-        if( name == "STR" )
+        if( name == "STR" ) {
+            const auto scalarArgument = !argumentType->isArray();
+            const auto scalarName = argumentType->base()._name;
+            const auto validArgument = scalarArgument && (scalarName == ScalarType::Name::Real || scalarName == ScalarType::Name::Bool);
+            if( !validArgument )
+                report(*argument, "STR-ի արգումենտը պետք է լինի REAL կամ BOOL։");
             continue;
+        }
 
         const auto parameterType = signature.parameters[index];
         if( parameterType == nullptr ) {
