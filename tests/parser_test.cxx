@@ -120,7 +120,7 @@ TEST_CASE("Parser omits declarations without a type", "[parser]")
     CHECK(main->_body->_items.empty());
 }
 
-TEST_CASE("All bundled examples follow the Cherry grammar", "[parser][examples]")
+TEST_CASE("All bundled examples follow the Cerasus grammar", "[parser][examples]")
 {
     const auto examples = std::filesystem::path{AVIUM_SOURCE_DIR} / "examples";
     REQUIRE(std::filesystem::exists(examples));

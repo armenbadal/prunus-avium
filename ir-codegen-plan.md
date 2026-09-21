@@ -40,10 +40,13 @@ Scanner → Parser → AST → SemanticAnalyzer
 - `avium-runtime`-ը կառուցվում է որպես առանձին C17 static library և
   իրականացնում է տեքստերը, զանգվածները, I/O-ն, `NUM`, `STR`, `LEN`, `SQR` ու
   runtime սխալները։
-- Root CMake project-ն արդեն միացնում է C-ն, C++-ը և `runtime/` ենթապանակը,
-  բայց դեռ չի գտնում կամ կապում LLVM-ը։
-- LLVM IR generator դեռ չկա։ Semantic analysis-ից հետո executable-ը հիմա
-  արտածում է AST-ի Lisp տեսքը։
+- Root CMake project-ը միացնում է C-ն, C++-ը, `runtime/` ենթապանակը և LLVM-ի
+  Core/Support բաղադրիչները՝ ուղղակի `prunus` ու test executable target-ներին։
+- Նվազագույն `IRCodeGen`-ը դատարկ Կեռասի `Main`-ից ստեղծում է host target
+  triple-ով LLVM module, ներքին Կեռասի procedure և C ABI-ի `i32 @main()`
+  wrapper, ապա module-ը ստուգում է `llvm::verifyModule()`-ով։ Հաջող semantic
+  analysis-ից հետո CLI-ն կանչում է generator-ը և module-ը տպում `stdout`։
+  `RuntimeAbi`-ն դեռ իրականացված չէ։
 - `book/ch07-llvm-ir.md`-ը դեռ չի պարունակում backend-ի տեխնիկական
   նկարագրությունը։
 
@@ -84,7 +87,7 @@ Array slot-ը ստեղծվում է ենթածրագրի entry block-ում, բ�
 ցիկլում, նախ ոչնչացվում է հին զանգվածը, ապա ստեղծվում է նորը։ Տեղային զանգվածը
 ոչնչացվում է ենթածրագրից դուրս գալիս, իսկ borrowed array parameter-ը՝ ոչ։
 
-### Cherry ենթածրագրերի ABI-ն
+### Կեռասի ենթածրագրերի ABI-ն
 
 - `REAL` պարամետրն ու վերադարձվող արժեքը LLVM `double` են։
 - `BOOL` պարամետրն ու վերադարձվող արժեքը LLVM `i1` են։
@@ -94,7 +97,7 @@ Array slot-ը ստեղծվում է ենթածրագրի entry block-ում, բ�
 - `TEXT` վերադարձնող ֆունկցիան LLVM-ում վերադարձնում է `void` և առաջին
   պարամետրով ստանում կանչողի հատկացրած `avium_text* result` storage-ը։ Կանչից
   առաջ այն գրելի և ownership չունեցող է, իսկ հաջող վերադարձից հետո ownership-ը
-  պատկանում է կանչողին։ Սա Cherry-ի բացահայտ ABI-ն է, ոչ LLVM `sret`։
+  պատկանում է կանչողին։ Սա Կեռասի բացահայտ ABI-ն է, ոչ LLVM `sret`։
 - Array parameter-ը borrowed `avium_array*` է և callee-ում չի ոչնչացվում։
 
 ## LLVM տիպերի մոդելը
@@ -136,7 +139,7 @@ runtime-ի ու համակարգային անուններին։
   նույն `SymbolTable`-ի և `SemanticModel`-ի հետ։
 - Անունների լուծումը, տիպերի ստուգումը, `Main`-ի գոյությունն ու
   ստորագրությունների վավերությունը semantic analyzer-ի պատասխանատվությունն են։
-  Codegen-ը դրանք չի կրկնում և Cherry semantic diagnostic չի ստեղծում։
+  Codegen-ը դրանք չի կրկնում և Կեռասի semantic diagnostic չի ստեղծում։
 - `ScalarType::Name`-ի վավեր արժեքներն են `Bool`, `Real` և `Text`։ Հաջող
   semantic analysis-ից հետո օգտագործվող ամեն expression ունի կոնկրետ տիպ, իսկ
   անհնար enum ճյուղերը նշվում են `std::unreachable()`-ով։
@@ -158,26 +161,28 @@ runtime-ի ու համակարգային անուններին։
 
 ### Փուլ 1․ LLVM build և generator-ի արտաքին ինտերֆեյս
 
-- CMake-ում ավելացնել `find_package(LLVM CONFIG REQUIRED)` և սկզբում կապել միայն
-  անհրաժեշտ Core/Support բաղադրիչները։
-- Frontend աղբյուրները հանել առանձին library target-ի մեջ, որպեսզի executable-ն
-  ու թեստերը նույն target-ը օգտագործեն։
-- LLVM dependency-ն պահել backend-ի target-ներում, որպեսզի `avium-runtime`-ը
-  շարունակի ինքնուրույն C17 գրադարան կառուցվել։
-- Ավելացնել մոտավորապես՝
+- Կատարված է՝ CMake-ը `find_package(LLVM CONFIG REQUIRED)`-ով գտնում է LLVM-ը։
+  Core/Support-ը, include path-երն ու LLVM-ի պահանջած compile definitions-ը
+  ուղղակի ավելացվում են `prunus` և test executable target-ներին։
+- Compiler-ի production աղբյուրները պահել մեկ `prunus` executable target-ում։
+  Առանձին `avium-frontend` կամ `avium-ir` library target չի ստեղծվում։
+- LLVM dependency-ն կապել `prunus`-ին, իսկ codegen թեստերն ավելացնելուց հետո՝
+  նաև գոյություն ունեցող test executable-ին։ `avium-runtime`-ը շարունակում է
+  ինքնուրույն C17 գրադարան կառուցվել։
+- Ավելացված են՝
 
   ```text
-  src/irgenerator.hxx
-  src/irgenerator.cxx
+  src/ircodegen.hxx
+  src/ircodegen.cxx
   src/runtimeabi.hxx
   src/runtimeabi.cxx
   ```
 
-- `IRGenerator`-ի interface-ը պետք է ընդունի `Program`, `SymbolTable`,
-  `SemanticModel` և target configuration։ AST-ը LLVM-specific տվյալներով չի
-  փոփոխվում։ Արդյունքը `std::unique_ptr<llvm::Module>` կամ սխալ ներկայացնող
-  `llvm::Expected` է։
-- Առաջին թեստով դատարկ `Main`-ից ստանալ վավեր module և C entry point։
+- `IRCodeGen`-ն ընդունում է `LLVMContext`, `SymbolTable` և `SemanticModel`, իսկ
+  `generate()`-ը՝ `Program`։ AST-ը LLVM-specific տվյալներով չի փոփոխվում, և
+  արդյունքը `std::unique_ptr<llvm::Module>` է։
+- Կատարված է՝ առաջին թեստը դատարկ `Main`-ից ստանում է վավեր module, ներքին
+  Կեռասի procedure և C entry point։
 
 ### Փուլ 2․ module, տիպեր և ստորագրություններ
 
@@ -253,7 +258,7 @@ runtime-ի ու համակարգային անուններին։
   line փոխանցելով այն runtime ֆունկցիաներին, որոնց ստորագրությունը դա պահանջում
   է։
 - `Print`-ն ընդունում է միայն `TEXT` և իջեցվում է `avium_print_text` runtime
-  կանչի։ `BOOL` կամ `REAL` արժեք տպելու համար Cherry ծրագիրը նախ օգտագործում է
+  կանչի։ `BOOL` կամ `REAL` արժեք տպելու համար Կեռասի ծրագիրը նախ օգտագործում է
   `STR`։
 - Պահպանել `runtime/design.md`-ի ownership պայմանագիրը․
   - text literal-ը borrowed է,
@@ -308,7 +313,7 @@ runtime-ի ու համակարգային անուններին։
 
 ## Թեստավորման ռազմավարություն
 
-- `tests/irgenerator_test.cxx`՝ փոքր `Program` → LLVM module։
+- `tests/ircodegen_test.cxx`՝ փոքր `Program` → LLVM module։
 - Ամեն գեներացված module-ի համար պարտադիր `llvm::verifyModule()`։
 - Կառուցվածքային թեստեր՝ function signature, `%avium.text` layout, basic block,
   runtime call, PHI և short-circuit։
@@ -335,7 +340,7 @@ runtime-ի ու համակարգային անուններին։
 
 ## Ավարտված լինելու չափանիշները
 
-Պլանը ավարտված է, երբ Cherry-ի բոլոր գործողությունները, control-flow
+Պլանը ավարտված է, երբ Կեռասի բոլոր գործողությունները, control-flow
 կառուցվածքները, user subroutine-ները, builtin-ները և զանգվածները ստանում են
 վավեր LLVM IR, ownership/cleanup-ը ճիշտ է բոլոր կատարման ուղիներում, հաջող
 օրինակները հասնում են codegen ու execution փուլերին, runtime սխալներն ունեն

@@ -2,14 +2,14 @@
 
 ## Project Structure & Module Organization
 
-This is a small C++23 compiler project for the Cherry language (namespace
+This is a small C++23 compiler project for the Cerasus language (namespace
 `avium`). Production code is in `src/`: AST types and visitors (`ast.hxx`,
 `astvisitor.hxx`), AST Lisp output (`astlisp.*`), lexical tokens (`lexeme.*`),
 scanner and parser (`scanner.*`, `parser.*`, `diagnostics.*`), and the
 executable entry point (`main.cxx`). Catch2 v3 tests live in `tests/`, with a
 separate `tests/CMakeLists.txt`. Language documentation and the formal grammar
 are in `specs/`; longer teaching material is in `book/`.
-Runnable Cherry source examples are kept in `examples/` as `.bas` files.
+Runnable Cerasus source examples are kept in `examples/` as `.bas` files.
 
 ## Build, Test, and Development Commands
 
