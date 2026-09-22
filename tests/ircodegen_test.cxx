@@ -12,8 +12,12 @@
 #include <llvm/IR/Verifier.h>
 #include <llvm/TargetParser/Host.h>
 
+#include <concepts>
+
 using namespace avium;
 using test::NodeList;
+
+static_assert(std::derived_from<IRCodeGen, ASTVisitor<IRCodeGen>>);
 
 TEST_CASE("IR code generator emits an empty Main and a C entry point", "[ircodegen]")
 {
@@ -27,7 +31,7 @@ TEST_CASE("IR code generator emits an empty Main and a C entry point", "[ircodeg
     REQUIRE(analyzer.analyze(*program));
 
     llvm::LLVMContext context;
-    auto module = IRCodeGen{context, symbols, model}.generate(*program);
+    auto module = IRCodeGen{context, *program, symbols, model}.generate();
 
     REQUIRE(module != nullptr);
     CHECK(module->getTargetTriple().str() == llvm::sys::getDefaultTargetTriple());

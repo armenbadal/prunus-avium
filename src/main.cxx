@@ -62,7 +62,8 @@ int main(int argc, char* argv[])
     }
 
     llvm::LLVMContext context;
-    auto module = avium::IRCodeGen{context, symbols, model}.generate(*program);
+    avium::IRCodeGen codeGenerator{context, *program, symbols, model};
+    auto module = codeGenerator.generate();
     module->print(llvm::outs(), nullptr);
 
     return EXIT_SUCCESS;
