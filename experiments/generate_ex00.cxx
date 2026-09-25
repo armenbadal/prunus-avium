@@ -13,26 +13,31 @@
 
 void generate_ex00()
 {
-    llvm::LLVMContext cx;
-    llvm::IRBuilder<> bl{cx};
+    llvm::LLVMContext context;
+    llvm::IRBuilder<> builder{context};
 
-    auto m = std::make_unique<llvm::Module>("ex00", cx);
-    m->setTargetTriple(llvm::sys::getDefaultTargetTriple());
+    llvm::Module module{"ex00", context};
+    module.setTargetTriple(llvm::sys::getDefaultTargetTriple());
 
-    auto* cerasusMainFuncType = llvm::FunctionType::get(llvm::Type::getVoidTy(cx), false);
-    auto* cerasusMainFunc = llvm::Function::Create(cerasusMainFuncType, llvm::Function::InternalLinkage, "cerasus_Main", *m);
-    auto* cerasusMainBegin = llvm::BasicBlock::Create(cx, "", cerasusMainFunc);
-    bl.SetInsertPoint(cerasusMainBegin);
-    bl.CreateRetVoid();
+    auto* voidTy = llvm::Type::getVoidTy(context);
+    auto* cerasusMainFuncType = llvm::FunctionType::get(voidTy, false);
+    auto* cerasusMainFunc = llvm::Function::Create(cerasusMainFuncType, llvm::Function::InternalLinkage, "cerasus_Main", module);
+    auto* cerasusMainBegin = llvm::BasicBlock::Create(context, "", cerasusMainFunc);
+    builder.SetInsertPoint(cerasusMainBegin);
+    builder.CreateRetVoid();
 
-    auto* siMainFuncType = llvm::FunctionType::get(llvm::Type::getInt32Ty(cx), false);
-    auto* siMainFunc = llvm::Function::Create(siMainFuncType, llvm::Function::ExternalLinkage, "main", *m);
-    auto* siMainBegin = llvm::BasicBlock::Create(cx, "", siMainFunc);
-    bl.SetInsertPoint(siMainBegin);
-    bl.CreateCall(cerasusMainFunc);
-    bl.CreateRet(bl.getInt32(0));
+    auto* int32Ty = llvm::Type::getInt32Ty(context);
+    auto* siMainFuncType = llvm::FunctionType::get(int32Ty, false);
+    auto* siMainFunc = llvm::Function::Create(siMainFuncType, llvm::Function::ExternalLinkage, "main", module);
+    auto* siMainBegin = llvm::BasicBlock::Create(context, "", siMainFunc);
+    builder.SetInsertPoint(siMainBegin);
+    builder.CreateCall(cerasusMainFunc);
+    builder.CreateRet(builder.getInt32(0));
 
-    m->print(llvm::outs(), nullptr);
+    if( llvm::verifyModule(module, &llvm::errs()) )
+        llvm::report_fatal_error("IR code generation produced an invalid module");
+
+    module.print(llvm::outs(), nullptr);
 }
 
 int main()
@@ -40,3 +45,7 @@ int main()
     generate_ex00();
     return 0;
 }
+
+/*
+clang++ generate_ex00.cxx $(llvm-config-20 --cxxflags --ldflags --libs --system-libs core support)
+*/
