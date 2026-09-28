@@ -11,7 +11,7 @@
 #include <llvm/TargetParser/Triple.h>
 #include <llvm/Support/raw_ostream.h>
 
-void generate_ex00()
+int main()
 {
     llvm::LLVMContext context;
     llvm::IRBuilder<> builder{context};
@@ -38,11 +38,7 @@ void generate_ex00()
         llvm::report_fatal_error("IR code generation produced an invalid module");
 
     module.print(llvm::outs(), nullptr);
-}
 
-int main()
-{
-    generate_ex00();
     return 0;
 }
 
