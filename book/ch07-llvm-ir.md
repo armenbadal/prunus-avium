@@ -282,7 +282,7 @@ $ lli ex00.ll
 ծրագիրը ոչինչ չէր անում, դատարկ `Main` ենթածրագիր էր։
 
 Այս օրինակն իր դատարկ արդյունքով ինձ հնարավորություն տվեց ցուցադրելու LLVM-ի IR 
-գեներացնելու հիմնաառանցքային օբյեկտներն ու մեխանիզմները։ Հիմա, արդեն զինված այս 
+գեներացնելու առանցքային օբյեկտներն ու մեխանիզմները։ Հիմա, արդեն զինված այս 
 գործիքներով, ցույց կտամ թե ինչպես IR ստեղծել աշխարհքին ողջունող C ծրագրի համար։
 Այն գրել եմ `ex01.c` ֆայլում։
 
@@ -303,17 +303,15 @@ $ clang -S -emit-llvm -O0 -fno-ident -fno-pic ex01.c
 ```
 
 Ստացվելու է մոտավորապես հետևյալը (կախված կատարման համակարգից ու կոմպիլյատորի 
-տարբերակից).
+տարբերակից): Այստեղ ես դեն եմ նետել այս պահին անկարևոր մետատվյալները, որպեսզի
+կարողանամ ուշադրությունս կենտրոնացնել էական մանրամասների վրա։
 
 ```llvm
-; ModuleID = 'ex01.c'
 source_filename = "ex01.c"
-target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-pc-linux-gnu"
 
 @.str = private unnamed_addr constant [4 x i8] c"Ok!\00", align 1
 
-; Function Attrs: noinline nounwind optnone uwtable
 define dso_local i32 @main() #0 {
   %1 = alloca i32, align 4
   store i32 0, ptr %1, align 4
@@ -322,18 +320,87 @@ define dso_local i32 @main() #0 {
 }
 
 declare i32 @puts(ptr noundef) #1
-
-attributes #0 = { noinline nounwind optnone uwtable "frame-pointer"="all" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
-attributes #1 = { "frame-pointer"="all" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
-
-!llvm.module.flags = !{!0, !1, !2, !3, !4}
-!llvm.ident = !{!5}
-
-!0 = !{i32 1, !"wchar_size", i32 4}
-!1 = !{i32 8, !"PIC Level", i32 2}
-!2 = !{i32 7, !"PIE Level", i32 2}
-!3 = !{i32 7, !"uwtable", i32 2}
-!4 = !{i32 7, !"frame-pointer", i32 2}
-!5 = !{!"Ubuntu clang version 20.1.8 (++20250804090239+87f0227cb601-1~exp1~20250804210352.139)"}
 ```
+
+Այս կոդում տեսնում եմ երկու անծանոթ միավոր։ Առաջինը՝ գլոբալ տեքստային 
+հաստատունի սահմանումն է, երկրորդը՝ `puts` ֆունկցիայի հայտարարությունը։
+
+Այս երկրորդ օրինակի կոդի գեներատորը գրելիս էլ ավելորդ անգամ չեմ կրկնի
+արդեն ասվածը։ Ուրեմն, միանգամից սահմանում եմ անհրաժեշտ օբյեկտները.
+
+```c++
+int main()
+{
+    llvm::LLVMContext context;
+    llvm::IRBuilder<> builder{context};
+    llvm::Module module{"ex02_h.c", context};
+    module.setTargetTriple(llvm::sys::getDefaultTargetTriple());
+```
+
+Պետք է սահմանեմ գլոբալ տեքստային փոփոխականը որպես 14 նիշերի զանգված։
+LLVM-ում նիշերը ներկայացվում են `i8` տիպով։ Ուրեմն նախ ստեղծում եմ `int8Ty`
+տիպը, հետո դրա օգտագործմամբ ստեղծում եմ զանգվածի տիպը։
+
+```c++
+    auto* int8Ty = llvm::Type::getInt8Ty(context);
+    auto* arrayTy = llvm::ArrayType::get(int8Ty, 14);
+```
+
+Հետո ստեղծում եմ «Hello, world!» տեքստային հաստատունը ներկայացնող օբյեկտը։
+
+```c++
+    auto* hwText = llvm::ConstantDataArray::getString(context, "Hello, world!");
+```
+
+Հիմա արդեն կարող եմ սահմանել գլոբալ փոփոխականը՝ վերը սահմանած զանգվածի 
+տիպով ու տեքստային հաստատունի արժեքով։
+
+```c++
+    llvm::GlobalVariable hwStr{module, arrayTy, true, llvm::GlobalValue::PrivateLinkage, hwText, "hw.str"};
+```
+
+Քանի որ տեքստն արտածելու համար `main` ֆունկցիայում կանչելու եմ `puts` ֆունկցիան, 
+այստեղ պետք է այն հայտարարեմ (տես `clang`-ի գեներացրած կոդի `declare i32 @puts...` 
+տողը)։
+
+```c++
+    auto* putsType = llvm::FunctionType::get(llvm::Type::getInt32Ty(context), {arrayTy}, false);
+    auto* putsFunc = llvm::Function::Create(putsType, llvm::Function::ExternalLinkage, "puts", module);
+```
+
+Սա հերիք է `puts`-ի հայտարարության համար։ Հիմա կառուցում եմ `main` ֆունկցիան, ու միանգամից 
+ավելացնում եմ առաջին basic block-ը։
+
+```c++
+    auto* mainType = llvm::FunctionType::get(llvm::Type::getInt32Ty(context), false);
+    auto* main = llvm::Function::Create(mainType, llvm::Function::ExternalLinkage, "main", module);
+    auto* mainEntry = llvm::BasicBlock::Create(context, "", main);
+    builder.SetInsertPoint(mainEntry);
+```
+
+Արդեն կարող եմ կանչել `puts`-ը՝ դրան կանչի արգումենտների ցուցակում տալով գլոբալ տեքստային
+հաստատունը ներկայացնող փոփոխականի հասցեն։
+
+```c++
+    builder.CreateCall(putsFunc, {&hwStr});
+```
+
+Վերադարձնում եմ սովորական դարձած 0 արժեքը։
+
+```c++
+    builder.CreateRet(builder.getInt32(0));
+```
+
+Ստուգում եմ, որ մոդուլը ճիշտ կառոցված լինի ու դրա IR տեքստը դուրս եմ բերում արտածման հոսքին։
+
+```c++
+    if( llvm::verifyModule(module, &llvm::errs()) )
+        llvm::report_fatal_error("IR code generation produced an invalid module");
+
+    module.print(llvm::outs(), nullptr);
+
+    return 0;
+}
+```
+
 
