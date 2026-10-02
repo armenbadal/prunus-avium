@@ -10,6 +10,9 @@
 #include <llvm/TargetParser/Host.h>
 #include <llvm/TargetParser/Triple.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/FileSystem.h>
+
+#include <system_error>
 
 void generate_main()
 {
@@ -41,12 +44,12 @@ void generate_main()
     // `i8`-ը սովորաբար ներկայացնում է մեկ բայթ, իսկ չորս տարրերի չափը
     // անհրաժեշտ է, քանի որ «Ok!» տողը ներառում է երեք տեսանելի նիշ և
     // վերջում զրոյական ավարտիչ բայթ՝ C-տողին համապատասխանելու համար։
-    auto* arrayTy = llvm::ArrayType::get(llvm::Type::getInt8Ty(cx), 4);
+    auto* arrayTy = llvm::ArrayType::get(llvm::Type::getInt8Ty(cx), 14);
 
     // Ստեղծում ենք «Ok!» տողի LLVM հաստատուն ներկայացումը։ LLVM-ի այս
     // helper-ը տողին ավելացնում է զրոյական ավարտիչը, ուստի ստացվող տվյալների
     // չափը համընկնում է վերևում սահմանված `[4 x i8]` տիպի չափին։
-    auto* initializer = llvm::ConstantDataArray::getString(cx, "Ok!");
+    auto* initializer = llvm::ConstantDataArray::getString(cx, "Hello, world!");
 
     // Մոդուլում հայտարարում ենք գլոբալ, հաստատուն տողային փոփոխական։
     // Առաջին արգումենտը ցույց է տալիս, թե որ մոդուլում է այն ապրելու,
@@ -94,7 +97,7 @@ void generate_main()
     // 32-բիթանոց ամբողջ թիվ և ընդունում է մեկ `[4 x i8]` զանգվածային
     // արժեք։ Այս հայտարարությունը պետք է համընկնի այն կանչի ձևի հետ, որը
     // LLVM IR-ում ստեղծվելու է ներքևում։
-    auto* putsType = llvm::FunctionType::get(llvm::Type::getInt32Ty(cx), {arrayTy}, false);
+    auto* putsType = llvm::FunctionType::get(llvm::Type::getInt32Ty(cx), {bl.getPtrTy()}, false);
 
     // Մոդուլում հայտարարում ենք `puts` անունով արտաքին ֆունկցիա։ Մենք դրա
     // մարմինը չենք գեներացնում․ վերջնական կապակցողը պետք է այն միացնի
@@ -113,11 +116,17 @@ void generate_main()
     // որը տիպապես համապատասխանում է `mainType`-ի պահանջած վերադարձի տիպին։
     bl.CreateRet(bl.getInt32(0));
 
-    // Ամբողջությամբ կառուցված LLVM մոդուլը տպում ենք ստանդարտ ելք։ Երկրորդ
-    // արգումենտի `nullptr` արժեքը նշանակում է, որ հատուկ IR annotation
-    // writer չենք տրամադրում, ուստի LLVM-ն օգտագործում է իր սովորական
-    // textual IR ձևաչափը։
-    m->print(llvm::outs(), nullptr);
+    if( llvm::verifyModule(*m, &llvm::errs()) )
+        llvm::report_fatal_error("IR code generation produced an invalid module");
+
+    std::error_code ec;
+    llvm::raw_fd_ostream fout{"ex01g.ll", ec, llvm::sys::fs::OF_None};
+    if( ec ) {
+        llvm::report_fatal_error("Cannot open file for output");
+        return;
+    }
+    
+    m->print(fout, nullptr);
 }
 
 /*

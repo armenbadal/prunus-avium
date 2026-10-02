@@ -268,6 +268,18 @@ C լեզվի այս `int`-ին `clang`-ի ստացած IR-ում համապատ�
 Կատարման արդյունքում ստանում եմ.
 
 ```llvm
+; ModuleID = 'ex00'
+source_filename = "ex00"
+target triple = "x86_64-pc-linux-gnu"
+
+define internal void @cerasus_Main() {
+  ret void
+}
+
+define i32 @main() {
+  call void @cerasus_Main()
+  ret i32 0
+}
 ```
 
 Առաջին հայացքից ստացվել է `clang`-ով ստացված արդյունքին շատ մոտ արդյունք։ Բայց, 
@@ -364,7 +376,9 @@ LLVM-ում նիշերը ներկայացվում են `i8` տիպով։ Ուր�
 տողը)։
 
 ```c++
-    auto* putsType = llvm::FunctionType::get(llvm::Type::getInt32Ty(context), {arrayTy}, false);
+    auto* int23Ty = llvm::Type::getInt32Ty(context);
+    auto* ptrTy = builder.getPtrTy();
+    auto* putsType = llvm::FunctionType::get(int32Ty, {ptrTy}, false);
     auto* putsFunc = llvm::Function::Create(putsType, llvm::Function::ExternalLinkage, "puts", module);
 ```
 
@@ -391,16 +405,59 @@ LLVM-ում նիշերը ներկայացվում են `i8` տիպով։ Ուր�
     builder.CreateRet(builder.getInt32(0));
 ```
 
-Ստուգում եմ, որ մոդուլը ճիշտ կառոցված լինի ու դրա IR տեքստը դուրս եմ բերում արտածման հոսքին։
+Ստուգում եմ, որ մոդուլը ճիշտ կառոցված լինի.
 
 ```c++
     if( llvm::verifyModule(module, &llvm::errs()) )
         llvm::report_fatal_error("IR code generation produced an invalid module");
+```
 
-    module.print(llvm::outs(), nullptr);
+Եթե ամեն ինչ ճիշտ է, մոդուլը գրում եմ `ex01g.ll` ֆայլում։
+
+```c++    
+    std::error_code ec;
+    llvm::raw_fd_ostream fout{"ex01g.ll", ec, llvm::sys::fs::OF_None};
+    if( ec ) {
+        llvm::report_fatal_error("Cannot open file for output");
+        return;
+    }
 
     return 0;
 }
 ```
 
+Հիմա նորից պետք է այս ծրագիրը թարգմանել ու կատարել.
 
+```bash
+$ clang++ generate_ex01.cxx -o generate_ex01 $(llvm-config --cxxflags --ldflags --libs --system-libs core support)
+$ ./generate_ex01
+```
+
+Ստացվում է հետևյալ բովանդակությամբ `ex01g.ll` ֆայլը.
+
+```llvm
+; ModuleID = 'prunus'
+source_filename = "prunus"
+target triple = "x86_64-pc-linux-gnu"
+
+@.str = private unnamed_addr constant [14 x i8] c"Hello, world!\00"
+
+define i32 @main() {
+entry:
+  %0 = call i32 @puts(ptr @.str)
+  ret i32 0
+}
+
+declare i32 @puts(ptr)
+```
+
+Ամեն ինչ ծանոթ է։ Կարելի է կատարել LLVM-ի բայթկոդի ինտերպրետատորով ու տեսնել արդյունքը.
+
+```bash
+$ lli ex01g.ll
+Hello, world!
+```
+
+Կարծում եմ, որ այս երկու պարզագույն օրինակերն արդեն ընդհանուր պատկերացում տվեցին
+այն մասին, թե ինչպես է կազմակերպվում LLVM IR կոդի գեներացիան։ Հաջորդիվ արդեն կսկսեմ
+պլանավորել ու իրականացնել վարացական շարահյուսական ծառից կոդ գեներացնելու մոդուլը։
