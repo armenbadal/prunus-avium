@@ -14,126 +14,44 @@
 
 #include <system_error>
 
-void generate_main()
-{
-    // Ստեղծում ենք LLVM-ի ընդհանուր համատեքստը, որը սեփականատերն է լինելու
-    // LLVM-ի տիպերի, հաստատունների և IR-ի կառուցման ընթացքում օգտագործվող
-    // ներքին օբյեկտների համար։ Նույն `LLVMContext`-ը փոխանցվում է բոլոր
-    // հետագա LLVM արժեքներին, որպեսզի դրանք պատկանեն նույն տիպային միջավայրին։
-    llvm::LLVMContext cx;
-
-    // Ստեղծում ենք IRBuilder, որը հեշտացնում է LLVM հրահանգների կառուցումը։
-    // Builder-ը պահում է ներկայիս ներդրման կետը և յուրաքանչյուր Create* կանչով
-    // նոր հրահանգ է ավելացնում այդ կետում։ Սկզբում ներդրման կետ սահմանված չէ,
-    // ուստի այն կսահմանենք `mainEntry` basic block-ը ստեղծելուց հետո։
-    llvm::IRBuilder<> bl{cx};
-
-    // Ստեղծում ենք նոր LLVM մոդուլ՝ «prunus» անունով։ Մոդուլը տվյալ գեներացման
-    // միավորի ամբողջական կոնտեյներն է․ դրա մեջ են հայտնվելու գլոբալ փոփոխականը,
-    // `main` ֆունկցիան, արտաքին `puts` հայտարարությունը և ստեղծված IR-ը։
-    // `std::make_unique`-ը նաև ապահովում է մոդուլի ավտոմատ ոչնչացումը
-    // `generate_main()`-ի ավարտին։
-    auto m = std::make_unique<llvm::Module>("prunus", cx);
-
-    // Մոդուլին նշում ենք թիրախ մեքենայի triple-ը՝ օգտագործելով ընթացիկ
-    // հոսթի լռելյայն արժեքը։ Դրանով LLVM-ին հայտնում ենք, թե որ օպերացիոն
-    // համակարգի, ճարտարապետության և ABI-ի համար պետք է մեկնաբանել մոդուլը։
-    m->setTargetTriple(llvm::sys::getDefaultTargetTriple());
-
-    // Կառուցում ենք LLVM-ի զանգվածային տիպ՝ չորս հատ 8-բիթանոց ամբողջ թվից։
-    // `i8`-ը սովորաբար ներկայացնում է մեկ բայթ, իսկ չորս տարրերի չափը
-    // անհրաժեշտ է, քանի որ «Ok!» տողը ներառում է երեք տեսանելի նիշ և
-    // վերջում զրոյական ավարտիչ բայթ՝ C-տողին համապատասխանելու համար։
-    auto* arrayTy = llvm::ArrayType::get(llvm::Type::getInt8Ty(cx), 14);
-
-    // Ստեղծում ենք «Ok!» տողի LLVM հաստատուն ներկայացումը։ LLVM-ի այս
-    // helper-ը տողին ավելացնում է զրոյական ավարտիչը, ուստի ստացվող տվյալների
-    // չափը համընկնում է վերևում սահմանված `[4 x i8]` տիպի չափին։
-    auto* initializer = llvm::ConstantDataArray::getString(cx, "Hello, world!");
-
-    // Մոդուլում հայտարարում ենք գլոբալ, հաստատուն տողային փոփոխական։
-    // Առաջին արգումենտը ցույց է տալիս, թե որ մոդուլում է այն ապրելու,
-    // երկրորդը՝ դրա LLVM տիպը, երրորդը՝ արժեքը փոփոխելի չէ, իսկ
-    // `PrivateLinkage`-ը սահմանափակում է սիմվոլի տեսանելիությունը միայն այս
-    // մոդուլի ներսում։ Վերջին երկու արգումենտները տալիս են initializer-ը և
-    // LLVM IR-ում ցուցադրվող ընթերցելի անունը՝ `.str`։
-    auto* gv = new llvm::GlobalVariable(*m, arrayTy, true, llvm::GlobalValue::PrivateLinkage,  initializer, ".str");
-
-    // Նշում ենք, որ գլոբալ տողի հասցեն կարող է լինել անանուն։ Սա թույլ է տալիս
-    // LLVM-ի օպտիմիզատորին նույնական հասցեի նշանակությունը չպահպանել և
-    // անհրաժեշտության դեպքում ազատորեն միավորել կամ վերադասավորել նման
-    // հաստատունները՝ առանց ծրագրի դիտարկելի վարքագիծը փոխելու։
-    gv->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
-
-    // Այս տարբերակը դիտմամբ թողնված է անջատված։ Եթե այն ակտիվացվի, գլոբալ
-    // տողի համար LLVM-ին կհայտարարվի մեկ բայթ հավասարեցում։ Այստեղ լռելյայն
-    // հավասարեցումը բավարար է, ուստի հրահանգը միայն որպես հնարավոր
-    // կարգավորման օրինակ է պահվում։
-    //gv->setAlignment(llvm::Align(1));
-
-    // Սահմանում ենք `main` ֆունկցիայի LLVM տիպը՝ 32-բիթանոց ամբողջ թվային
-    // վերադարձի արժեքով և առանց պարամետրերի։ Սա համապատասխանում է C/C++-ի
-    // սովորական `int main()` ստորագրությանը։
-    auto* mainType = llvm::FunctionType::get(llvm::Type::getInt32Ty(cx), false);
-
-    // Մոդուլում ստեղծում ենք արտաքին կապով `main` ֆունկցիան։ Արտաքին linkage-ը
-    // թույլ է տալիս թիրախի գործարկման միջավայրին գտնել այս ֆունկցիան որպես
-    // ծրագրի մուտքի կետ։ Ֆունկցիան դեռ մարմին չունի, դրա համար հաջորդ քայլում
-    // ստեղծում ենք դրա առաջին basic block-ը։
-    auto* main = llvm::Function::Create(mainType, llvm::Function::ExternalLinkage, "main", *m);
-
-    // Ստեղծում ենք `main`-ի «entry» basic block-ը։ Basic block-ը հաջորդական
-    // LLVM հրահանգների այն հատվածն է, որն ունի մեկ մուտք և ավարտվում է
-    // կառավարման հոսքը փոխող հրահանգով, այստեղ՝ `ret`-ով։ Block-ը միանգամից
-    // կապվում է `main` ֆունկցիային։
-    auto* mainEntry = llvm::BasicBlock::Create(cx, "entry", main);
-
-    // IRBuilder-ի ներդրման ընթացիկ կետը տեղափոխում ենք `entry` block-ի
-    // ավարտը։ Այս պահից builder-ի ստեղծած բոլոր հրահանգները, մինչև կետի
-    // փոփոխվելը, կավելացվեն հենց `main`-ի այս basic block-ում։
-    bl.SetInsertPoint(mainEntry);
-
-    // Կառուցում ենք արտաքին `puts` ֆունկցիայի տիպը։ Այն վերադարձնում է
-    // 32-բիթանոց ամբողջ թիվ և ընդունում է մեկ `[4 x i8]` զանգվածային
-    // արժեք։ Այս հայտարարությունը պետք է համընկնի այն կանչի ձևի հետ, որը
-    // LLVM IR-ում ստեղծվելու է ներքևում։
-    auto* putsType = llvm::FunctionType::get(llvm::Type::getInt32Ty(cx), {bl.getPtrTy()}, false);
-
-    // Մոդուլում հայտարարում ենք `puts` անունով արտաքին ֆունկցիա։ Մենք դրա
-    // մարմինը չենք գեներացնում․ վերջնական կապակցողը պետք է այն միացնի
-    // համապատասխան runtime կամ C գրադարանի իրականացմանը։
-    auto* putsFunc = llvm::Function::Create(putsType, llvm::Function::ExternalLinkage, "puts", *m); 
-
-    // `main`-ի ընթացիկ basic block-ում ավելացնում ենք `puts` կանչը՝ որպես
-    // արգումենտ փոխանցելով գլոբալ `.str` տողի արժեքը։ Կանչի արդյունքը
-    // դիտմամբ չենք պահպանում, քանի որ այս օրինակում մեզ հետաքրքրում է միայն
-    // տողի արտածման կողմնակի ազդեցությունը, ոչ թե `puts`-ի վերադարձած կոդը։
-    bl.CreateCall(putsFunc, {gv});
-
-    // Ավարտում ենք `main` ֆունկցիան և վերադարձնում ենք զրո։ Զրոյական
-    // վերադարձի արժեքը սովորաբար նշանակում է, որ ծրագրի կատարումն ավարտվել է
-    // հաջողությամբ։ `bl.getInt32(0)`-ը ստեղծում է LLVM-ի `i32` հաստատուն,
-    // որը տիպապես համապատասխանում է `mainType`-ի պահանջած վերադարձի տիպին։
-    bl.CreateRet(bl.getInt32(0));
-
-    if( llvm::verifyModule(*m, &llvm::errs()) )
-        llvm::report_fatal_error("IR code generation produced an invalid module");
-
-    std::error_code ec;
-    llvm::raw_fd_ostream fout{"ex01g.ll", ec, llvm::sys::fs::OF_None};
-    if( ec ) {
-        llvm::report_fatal_error("Cannot open file for output");
-        return;
-    }
-    
-    m->print(fout, nullptr);
-}
-
 /*
 clang++ gen_ex00.cxx $(llvm-config-20 --cxxflags --ldflags --libs --system-libs core support)
 */
 int main()
 {
-    generate_main();
+    llvm::LLVMContext context;
+    llvm::IRBuilder<> builder{context};
+
+    llvm::Module module{"ex01g", context};
+    module.setTargetTriple(llvm::sys::getDefaultTargetTriple());
+    llvm::IntegerType* int8Ty = llvm::Type::getInt8Ty(context);
+    llvm::ArrayType* arrayTy = llvm::ArrayType::get(int8Ty, 14);
+    llvm::Constant* initializer = llvm::ConstantDataArray::getString(context, "Hello, world!");
+    llvm::GlobalVariable* hwStr = new llvm::GlobalVariable(module, arrayTy, true, llvm::GlobalValue::PrivateLinkage, initializer, "hw.str");
+
+    llvm::IntegerType* int32Ty = llvm::Type::getInt32Ty(context);
+    llvm::FunctionType* mainType = llvm::FunctionType::get(int32Ty, false);
+    llvm::Function* mainFunc = llvm::Function::Create(mainType, llvm::Function::ExternalLinkage, "main", module);
+    llvm::BasicBlock* mainEntry = llvm::BasicBlock::Create(context, "", mainFunc);
+    builder.SetInsertPoint(mainEntry);
+
+    llvm::PointerType* ptrTy = builder.getPtrTy();
+    llvm::FunctionType* putsType = llvm::FunctionType::get(int32Ty, {ptrTy}, false);
+    llvm::Function* putsFunc = llvm::Function::Create(putsType, llvm::Function::ExternalLinkage, "puts", module); 
+
+    builder.CreateCall(putsFunc, {hwStr});
+
+    llvm::ConstantInt* zero = builder.getInt32(0);
+    builder.CreateRet(zero);
+
+    if( llvm::verifyModule(module, &llvm::errs()) )
+        llvm::report_fatal_error("IR code generation produced an invalid module");
+
+    std::error_code ec;
+    llvm::raw_fd_ostream fout{"ex01g.ll", ec, llvm::sys::fs::OF_None};
+    if( ec )
+        llvm::report_fatal_error("Cannot open file for output");
+    module.print(fout, nullptr);
+
     return 0;
 }

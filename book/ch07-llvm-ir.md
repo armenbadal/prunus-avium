@@ -1,5 +1,7 @@
 # LLVM և կոդի գեներացիա
 
+## Երկու պարզագույն օրինակ
+
 Կոդի գեներատորը պետք է Կեռասի ծրագրից կառուցի LLVM IR-ի մոդուլ։ C++ իրականացման
 տեսակետից՝ սեմանտիկ ստուգում անցած վերացական շարահյուսական ծառից պետք է կառուցել
 `llvm::Module` օբյեկտ, որում Կեռասի ամեն մի ենթածրագրի համար ստեղծված է համարժեք
@@ -178,7 +180,7 @@ LLVM-ի ֆունկցիան ստեղծում եմ `Function::Create` ֆունկց
 
 ```c++
     auto* cerasusMainFunc = llvm::Function::Create(cerasusMainFuncType,
-                      llvm::Function::InternalLinkage, "cerasus_Main", module);
+                    llvm::Function::ExternalLinkage, "cerasus_Main", module);
 ```
 
 Հիմա պետք է `cerasus_Main` ֆունկցիայի մարմնում գրեմ միակ `ret void` հրահանգը։
@@ -322,7 +324,7 @@ $ clang -S -emit-llvm -O0 -fno-ident -fno-pic ex01.c
 source_filename = "ex01.c"
 target triple = "x86_64-pc-linux-gnu"
 
-@.str = private unnamed_addr constant [4 x i8] c"Ok!\00", align 1
+@.str = private unnamed_addr constant [14 x i8] c"Hello, world!\00", align 1
 
 define dso_local i32 @main() #0 {
   %1 = alloca i32, align 4
@@ -345,7 +347,7 @@ int main()
 {
     llvm::LLVMContext context;
     llvm::IRBuilder<> builder{context};
-    llvm::Module module{"ex02_h.c", context};
+    llvm::Module module{"ex01g", context};
     module.setTargetTriple(llvm::sys::getDefaultTargetTriple());
 ```
 
@@ -354,14 +356,14 @@ LLVM-ում նիշերը ներկայացվում են `i8` տիպով։ Ուր�
 տիպը, հետո դրա օգտագործմամբ ստեղծում եմ զանգվածի տիպը։
 
 ```c++
-    auto* int8Ty = llvm::Type::getInt8Ty(context);
-    auto* arrayTy = llvm::ArrayType::get(int8Ty, 14);
+    llvm::IntegerType* int8Ty = llvm::Type::getInt8Ty(context);
+    llvm::ArrayType* arrayTy = llvm::ArrayType::get(int8Ty, 14);
 ```
 
 Հետո ստեղծում եմ «Hello, world!» տեքստային հաստատունը ներկայացնող օբյեկտը։
 
 ```c++
-    auto* hwText = llvm::ConstantDataArray::getString(context, "Hello, world!");
+    llvm::ConstantDataArray* hwText = llvm::ConstantDataArray::getString(context, "Hello, world!");
 ```
 
 Հիմա արդեն կարող եմ սահմանել գլոբալ փոփոխականը՝ վերը սահմանած զանգվածի 
@@ -376,19 +378,19 @@ LLVM-ում նիշերը ներկայացվում են `i8` տիպով։ Ուր�
 տողը)։
 
 ```c++
-    auto* int23Ty = llvm::Type::getInt32Ty(context);
-    auto* ptrTy = builder.getPtrTy();
-    auto* putsType = llvm::FunctionType::get(int32Ty, {ptrTy}, false);
-    auto* putsFunc = llvm::Function::Create(putsType, llvm::Function::ExternalLinkage, "puts", module);
+    llvm::IntegerType* int32Ty = llvm::Type::getInt32Ty(context);
+    llvm::PointerType* ptrTy = builder.getPtrTy();
+    llvm::FunctionType* putsType = llvm::FunctionType::get(int32Ty, {ptrTy}, false);
+    llvm::Function* putsFunc = llvm::Function::Create(putsType, llvm::Function::ExternalLinkage, "puts", module);
 ```
 
 Սա հերիք է `puts`-ի հայտարարության համար։ Հիմա կառուցում եմ `main` ֆունկցիան, ու միանգամից 
 ավելացնում եմ առաջին basic block-ը։
 
 ```c++
-    auto* mainType = llvm::FunctionType::get(llvm::Type::getInt32Ty(context), false);
-    auto* main = llvm::Function::Create(mainType, llvm::Function::ExternalLinkage, "main", module);
-    auto* mainEntry = llvm::BasicBlock::Create(context, "", main);
+    llvm::FunctionType* mainType = llvm::FunctionType::get(llvm::Type::getInt32Ty(context), false);
+    llvm::Function* main = llvm::Function::Create(mainType, llvm::Function::ExternalLinkage, "main", module);
+    llvm::BasicBlock* mainEntry = llvm::BasicBlock::Create(context, "", main);
     builder.SetInsertPoint(mainEntry);
 ```
 
@@ -405,7 +407,7 @@ LLVM-ում նիշերը ներկայացվում են `i8` տիպով։ Ուր�
     builder.CreateRet(builder.getInt32(0));
 ```
 
-Ստուգում եմ, որ մոդուլը ճիշտ կառոցված լինի.
+Ստուգում եմ, որ մոդուլը ճիշտ կառուցված լինի.
 
 ```c++
     if( llvm::verifyModule(module, &llvm::errs()) )
@@ -417,10 +419,10 @@ LLVM-ում նիշերը ներկայացվում են `i8` տիպով։ Ուր�
 ```c++    
     std::error_code ec;
     llvm::raw_fd_ostream fout{"ex01g.ll", ec, llvm::sys::fs::OF_None};
-    if( ec ) {
+    if( ec )
         llvm::report_fatal_error("Cannot open file for output");
-        return;
-    }
+
+    module.print(fout, nullptr);
 
     return 0;
 }
@@ -440,10 +442,9 @@ $ ./generate_ex01
 source_filename = "prunus"
 target triple = "x86_64-pc-linux-gnu"
 
-@.str = private unnamed_addr constant [14 x i8] c"Hello, world!\00"
+@hw.str = private unnamed_addr constant [14 x i8] c"Hello, world!\00"
 
 define i32 @main() {
-entry:
   %0 = call i32 @puts(ptr @.str)
   ret i32 0
 }
@@ -458,6 +459,7 @@ $ lli ex01g.ll
 Hello, world!
 ```
 
-Կարծում եմ, որ այս երկու պարզագույն օրինակերն արդեն ընդհանուր պատկերացում տվեցին
-այն մասին, թե ինչպես է կազմակերպվում LLVM IR կոդի գեներացիան։ Հաջորդիվ արդեն կսկսեմ
-պլանավորել ու իրականացնել վարացական շարահյուսական ծառից կոդ գեներացնելու մոդուլը։
+Կարծում եմ, որ այս երկու օրինակներն արդեն ընդհանուր պատկերացում տվեցին այն մասին, 
+թե ինչպես է կազմակերպվում LLVM IR կոդի գեներացիան։ Հաջորդիվ արդեն կսկսեմ պլանավորել 
+ու իրականացնել վերացական շարահյուսական ծառից կոդ գեներացնելու մոդուլը։
+
