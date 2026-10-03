@@ -266,10 +266,11 @@ Program AST
 
 Անունների երկու pass-երը սահմանված են `nameanalysis.cxx`-ում, իսկ
 `TypeCheckingPass`-ը՝ `typechecking.cxx`-ում։ Դրանք իրականացման ներքին
-մանրամասներ են և կոմպիլյատորի մնացած մասերին տեսանելի չեն։ Ներքին փուլերը
-կիսում են փոքր `SemanticContext` օբյեկտը, որը պահում է `SymbolTable`,
-`SemanticModel` և `Diagnostics` հղումները։ Արտաքին ինտերֆեյսը միայն
-`SemanticAnalyzer` դասն է։
+մանրամասներ են և կոմպիլյատորի մնացած մասերին տեսանելի չեն։ Փուլերը կիսում են
+փոքր `SemanticContext` օբյեկտը, որը պահում է `SymbolTable`, `SemanticModel` և
+`Diagnostics` հղումները։ Այն կազմվում է կանչողի մակարդակում և փոխանցվում
+`SemanticAnalyzer`-ին։ Այսպիսով վերլուծիչի կախվածություններն ու դրանց կյանքի
+տևողությունը բացահայտ վերահսկվում են վերլուծիչը ստեղծող կոդում։
 
 
 ## Անունների դերերի որոշումը
@@ -645,17 +646,27 @@ const auto& boolean = scalarType(ScalarType::Name::Bool);
 է նաև բաց թողնվածների քանակը։ Այս սահմանը թույլ չի տալիս, որ անհաջող
 վերլուծությունը լցնի հիշողությունը իրար հաջորդող հազարավոր հաղորդագրություններով։
 
-`SemanticAnalyzer::analyze()` մեթոդը հերթով գործարկում է փուլերը և
-վերադարձնում է `true`, եթե ոչ մի ախտորոշում չի գրանցվել.
+Կանչողը նախ ստեղծում է վերլուծության տվյալները միավորող context-ը, ապա այն
+փոխանցում է վերլուծիչին.
+
+```cpp
+SymbolTable symbols;
+SemanticModel model;
+Diagnostics diagnostics;
+SemanticContext semanticContext{symbols, model, diagnostics};
+SemanticAnalyzer analyzer{semanticContext};
+const auto valid = analyzer.analyze(*program);
+```
+
+`SemanticAnalyzer::analyze()` մեթոդը նույն context-ը փոխանցում է ներքին
+փուլերին և վերադարձնում է `true`, եթե ոչ մի ախտորոշում չի գրանցվել.
 
 ```cpp
 bool SemanticAnalyzer::analyze(const Program& program)
 {
-    SemanticContext context{
-        _symbols, _model, _diagnostics};
-    analyzeNames(program, context);
-    checkTypes(program, context);
-    return _diagnostics.count() == 0;
+    analyzeNames(program, _context);
+    checkTypes(program, _context);
+    return _context.diagnostics.count() == 0;
 }
 ```
 
