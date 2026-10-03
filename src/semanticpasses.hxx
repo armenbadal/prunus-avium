@@ -2,22 +2,9 @@
 
 #include "semantic.hxx"
 
-#include <string_view>
 #include <utility>
 
 namespace avium {
-
-struct SemanticContext {
-    SymbolTable& symbols;
-    SemanticModel& model;
-    Diagnostics& diagnostics;
-
-    void report(const Node& node, std::string_view message)
-    {
-        diagnostics.advance();
-        diagnostics.mark(node.line, message);
-    }
-};
 
 inline const ScalarType& scalarType(ScalarType::Name name)
 {

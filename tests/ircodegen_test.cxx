@@ -23,7 +23,8 @@ TEST_CASE("IR code generator emits an empty Main and a C entry point", "[ircodeg
     SymbolTable symbols;
     SemanticModel model;
     Diagnostics diagnostics;
-    SemanticAnalyzer analyzer{symbols, model, diagnostics};
+    SemanticContext semanticContext{symbols, model, diagnostics};
+    SemanticAnalyzer analyzer{semanticContext};
     REQUIRE(analyzer.analyze(*program));
 
     llvm::LLVMContext context;
@@ -74,7 +75,8 @@ TEST_CASE("IR code generator declares and emits every subroutine before the C en
     SymbolTable symbols;
     SemanticModel model;
     Diagnostics diagnostics;
-    SemanticAnalyzer analyzer{symbols, model, diagnostics};
+    SemanticContext semanticContext{symbols, model, diagnostics};
+    SemanticAnalyzer analyzer{semanticContext};
     REQUIRE(analyzer.analyze(*program));
 
     const auto helperSymbol = model.symbol(helperId);

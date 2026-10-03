@@ -5,6 +5,7 @@
 #include "symbols.hxx"
 
 #include <optional>
+#include <string_view>
 #include <unordered_map>
 
 namespace avium {
@@ -26,16 +27,26 @@ private:
     std::unordered_map<NodeId, const Type*> _types;
 };
 
+struct SemanticContext {
+    SymbolTable& symbols;
+    SemanticModel& model;
+    Diagnostics& diagnostics;
+
+    void report(const Node& node, std::string_view message)
+    {
+        diagnostics.advance();
+        diagnostics.mark(node.line, message);
+    }
+};
+
 class SemanticAnalyzer {
 public:
-    SemanticAnalyzer(SymbolTable& symbols, SemanticModel& model, Diagnostics& diagnostics);
+    explicit SemanticAnalyzer(SemanticContext& context);
 
     bool analyze(const Program& program);
 
 private:
-    SymbolTable& _symbols;
-    SemanticModel& _model;
-    Diagnostics& _diagnostics;
+    SemanticContext& _context;
 };
 
 } // namespace avium

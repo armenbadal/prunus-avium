@@ -38,21 +38,16 @@ const Type* SemanticModel::type(NodeId node) const
     return nullptr;
 }
 
-SemanticAnalyzer::SemanticAnalyzer(
-    SymbolTable& symbols, SemanticModel& model, Diagnostics& diagnostics)
-    : _symbols{symbols}
-    , _model{model}
-    , _diagnostics{diagnostics}
+SemanticAnalyzer::SemanticAnalyzer(SemanticContext& context)
+    : _context{context}
 {
 }
 
 bool SemanticAnalyzer::analyze(const Program& program)
 {
-    SemanticContext context{
-        _symbols, _model, _diagnostics};
-    analyzeNames(program, context);
-    checkTypes(program, context);
-    return _diagnostics.count() == 0;
+    analyzeNames(program, _context);
+    checkTypes(program, _context);
+    return _context.diagnostics.count() == 0;
 }
 
 } // namespace avium

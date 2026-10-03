@@ -55,7 +55,8 @@ int main(int argc, char* argv[])
 
     avium::SymbolTable symbols;
     avium::SemanticModel model;
-    avium::SemanticAnalyzer analyzer{symbols, model, diagnostics};
+    avium::SemanticContext semanticContext{symbols, model, diagnostics};
+    avium::SemanticAnalyzer analyzer{semanticContext};
     if( !analyzer.analyze(*program) ) {
         printDiagnostics(source, diagnostics);
         return EXIT_FAILURE;
