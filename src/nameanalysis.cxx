@@ -108,9 +108,7 @@ void NameDeclarationPass::declareSubroutines(const Program& program)
             continue;
         }
 
-        const auto id = _context.symbols.declareSubroutine(
-            {subroutine->_name,
-                {std::move(parameters), subroutine->_returnType.get()}});
+        const auto id = _context.symbols.declareSubroutine({subroutine->_name, {std::move(parameters), subroutine->_returnType.get()}});
         _context.model.bind(subroutine->id(), id);
     }
 }
@@ -138,8 +136,7 @@ void NameDeclarationPass::resolveEntryPoint(const Program& program)
 void NameDeclarationPass::declareParameters(const Subroutine& subroutine)
 {
     for( const auto& parameter : subroutine._parameters ) {
-        const auto id = _context.symbols.declareVariable(parameter->_name,
-            *parameter->_type, VariableStorage::Parameter);
+        const auto id = _context.symbols.declareVariable(parameter->_name, *parameter->_type, VariableStorage::Parameter);
         if( id == UnknownSymbol )
             _context.report(*parameter, std::format("'{}' անունն արդեն սահմանված է այս ենթածրագրում։", parameter->_name));
         else
@@ -178,8 +175,7 @@ void NameDeclarationPass::declareLocals(const Sequence& sequence)
 
 void NameDeclarationPass::declareDim(const Dim& dim)
 {
-    const auto id = _context.symbols.declareVariable(
-        dim._name, *dim._type, VariableStorage::Local);
+    const auto id = _context.symbols.declareVariable(dim._name, *dim._type, VariableStorage::Local);
     if( id == UnknownSymbol )
         _context.report(dim, std::format("'{}' անունն արդեն սահմանված է այս ենթածրագրում։", dim._name));
     else
@@ -198,11 +194,9 @@ void NameDeclarationPass::declareForVariable(const For& loop)
         return;
     }
 
-    const auto id = _context.symbols.declareVariable(name,
-        scalarType(ScalarType::Name::Real), VariableStorage::ForVariable);
+    const auto id = _context.symbols.declareVariable(name, scalarType(ScalarType::Name::Real), VariableStorage::ForVariable);
     _context.model.bind(loop._parameter->id(), id);
 }
-
 
 void NameResolutionPass::resolve(const Subroutine& subroutine)
 {
@@ -326,8 +320,7 @@ void NameResolutionPass::resolveVariable(const Variable& variable)
     _context.model.bind(variable.id(), *id);
 }
 
-void NameResolutionPass::resolveSubroutine(
-    const Node& node, std::string_view name)
+void NameResolutionPass::resolveSubroutine(const Node& node, std::string_view name)
 {
     const auto id = _context.symbols.lookupSubroutine(name);
     if( !id ) {

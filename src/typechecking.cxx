@@ -50,16 +50,19 @@ private:
     const Type* typeOf(const Unary& node);
     const Type* typeOf(const Binary& node);
     const Type* typeOf(const Apply& node);
-    const Type* remember(const Expression& expression, const Type& type);
+    const Type* cacheType(const Expression& expression, const Type& type);
+
+    const Type& typeOfArithmetic(const Binary& binary);
+    const Type& typeOfEquality(const Binary& binary);
+    const Type& typeOfComparison(const Binary& binary);
+    const Type& typeOfLogical(const Binary& binary);
+    const Type& typeOfConcatenation(const Binary& binary);
+    const Type* typeOfIndex(const Binary& binary);
 
     const VariableSymbol* boundVariable(const Variable& variable) const;
     const SubroutineSymbol* boundSubroutine(const Node& node) const;
-    std::vector<const Type*> argumentTypes(
-        const std::vector<Expression::Ptr>& arguments);
-    void validateArguments(const Node& node, std::string_view name,
-        const std::vector<Expression::Ptr>& arguments,
-        const std::vector<const Type*>& argumentTypes,
-        const SubroutineSignature& signature);
+    std::vector<const Type*> argumentTypes(const std::vector<Expression::Ptr>& arguments);
+    void validateArguments(const Node& node, std::string_view name, const std::vector<Expression::Ptr>& arguments, const std::vector<const Type*>& argumentTypes, const SubroutineSignature& signature);
     const Type* requireScalar(const Expression& expression);
     void validateScalarOperands(const Binary& binary, const Type& expected);
     void validateIndex(const Expression& index);
@@ -136,7 +139,7 @@ void TypeCheckingPass::check(const Let& let)
 {
     const auto* target = boundVariable(*let._variable);
     if( target != nullptr )
-        remember(*let._variable, *target->type);
+        cacheType(*let._variable, *target->type);
     if( let._index )
         validateIndex(*let._index);
     const auto* valueType = typeOf(*let._value);
@@ -146,9 +149,7 @@ void TypeCheckingPass::check(const Let& let)
 
     const auto& declaredType = *target->type;
     const auto arrayTarget = declaredType.isArray();
-    const Type& targetType = let._index && arrayTarget
-        ? declaredType.base()
-        : declaredType;
+    const Type& targetType = let._index && arrayTarget ? declaredType.base() : declaredType;
     bool validTarget = true;
     if( let._index && !arrayTarget ) {
         _context.report(*let._variable, std::format("'{}' փոփոխականը զանգված չէ։", let._variable->_name));
@@ -199,16 +200,13 @@ void TypeCheckingPass::check(const For& loop)
     typeOf(*loop._parameter);
 
     const auto& expected = scalarType(ScalarType::Name::Real);
-    if( const auto* actual = requireScalar(*loop._begin);
-        typeMismatch(actual, expected) )
+    if( const auto* actual = requireScalar(*loop._begin); typeMismatch(actual, expected) )
         _context.report(*loop._begin, std::format("FOR-ի սկզբնական արժեքը պետք է լինի REAL, բայց ստացվել է {}։", *actual));
 
-    if( const auto* actual = requireScalar(*loop._end);
-        typeMismatch(actual, expected) )
+    if( const auto* actual = requireScalar(*loop._end); typeMismatch(actual, expected) )
         _context.report(*loop._end, std::format("FOR-ի վերջնական արժեքը պետք է լինի REAL, բայց ստացվել է {}։", *actual));
 
-    if( const auto* actual = requireScalar(*loop._step);
-        typeMismatch(actual, expected) )
+    if( const auto* actual = requireScalar(*loop._step); typeMismatch(actual, expected) )
         _context.report(*loop._step, std::format("FOR-ի քայլը պետք է լինի REAL, բայց ստացվել է {}։", *actual));
     if( loop._step->_value == 0.0 )
         _context.report(*loop._step, "FOR-ի քայլը չի կարող լինել 0։");
@@ -225,8 +223,7 @@ void TypeCheckingPass::check(const Call& call)
 
     if( subroutine->signature.returnType )
         _context.report(call, "CALL-ով կարելի է կանչել միայն պրոցեդուրա։");
-    validateArguments(call, call._callee, call._arguments, types,
-        subroutine->signature);
+    validateArguments(call, call._callee, call._arguments, types, subroutine->signature);
 }
 
 void TypeCheckingPass::check(const Return& statement)
@@ -270,23 +267,23 @@ const Type* TypeCheckingPass::typeOf(const Expression& expression)
 
 const Type* TypeCheckingPass::typeOf(const Boolean& boolean)
 {
-    return remember(boolean, scalarType(ScalarType::Name::Bool));
+    return cacheType(boolean, scalarType(ScalarType::Name::Bool));
 }
 
 const Type* TypeCheckingPass::typeOf(const Number& number)
 {
-    return remember(number, scalarType(ScalarType::Name::Real));
+    return cacheType(number, scalarType(ScalarType::Name::Real));
 }
 
 const Type* TypeCheckingPass::typeOf(const Text& text)
 {
-    return remember(text, scalarType(ScalarType::Name::Text));
+    return cacheType(text, scalarType(ScalarType::Name::Text));
 }
 
 const Type* TypeCheckingPass::typeOf(const Variable& variable)
 {
     const auto* symbol = boundVariable(variable);
-    return symbol == nullptr ? nullptr : remember(variable, *symbol->type);
+    return symbol == nullptr ? nullptr : cacheType(variable, *symbol->type);
 }
 
 const Type* TypeCheckingPass::typeOf(const Unary& unary)
@@ -298,14 +295,14 @@ const Type* TypeCheckingPass::typeOf(const Unary& unary)
             const auto& result = scalarType(ScalarType::Name::Bool);
             if( typeMismatch(operandType, result) )
                 _context.report(unary, std::format("'{}' գործողության օպերանդը պետք է լինի BOOL, բայց ստացվել է {}։", unary._operation, *operandType));
-            return remember(unary, result);
+            return cacheType(unary, result);
         }
         case Operation::Add:
         case Operation::Sub: {
             const auto& result = scalarType(ScalarType::Name::Real);
             if( typeMismatch(operandType, result) )
                 _context.report(unary, std::format("Ունար '{}' գործողության օպերանդը պետք է լինի REAL, բայց ստացվել է {}։", unary._operation, *operandType));
-            return remember(unary, result);
+            return cacheType(unary, result);
         }
         default:
             std::unreachable();
@@ -314,10 +311,6 @@ const Type* TypeCheckingPass::typeOf(const Unary& unary)
 
 const Type* TypeCheckingPass::typeOf(const Binary& binary)
 {
-    const auto* leftType = typeOf(*binary._left);
-    const auto* rightType = typeOf(*binary._right);
-
-    const Type* result = nullptr;
     switch( binary._operation ) {
         case Operation::Add:
         case Operation::Sub:
@@ -325,64 +318,87 @@ const Type* TypeCheckingPass::typeOf(const Binary& binary)
         case Operation::Div:
         case Operation::Quot:
         case Operation::Mod:
-        case Operation::Pow:  {
-            result = &scalarType(ScalarType::Name::Real);
-            validateScalarOperands(binary, *result);
-            break;
-        }
+        case Operation::Pow:
+            return cacheType(binary, typeOfArithmetic(binary));
         case Operation::Eq:
-        case Operation::Ne: {
-            const auto* leftScalar = requireScalar(*binary._left);
-            const auto* rightScalar = requireScalar(*binary._right);
-            const auto typesKnown = leftType != nullptr && rightType != nullptr;
-            const auto typesMatch = typesKnown && *leftType == *rightType;
-            if( leftScalar != nullptr && rightScalar != nullptr && typesKnown && !typesMatch )
-                _context.report(binary, std::format("'{}' գործողության օպերանդները պետք է լինեն նույն տիպի։", binary._operation));
-            result = &scalarType(ScalarType::Name::Bool);
-            break;
-        }
+        case Operation::Ne:
+            return cacheType(binary, typeOfEquality(binary));
         case Operation::Gt:
         case Operation::Ge:
         case Operation::Lt:
-        case Operation::Le: {
-            const auto* leftScalar = requireScalar(*binary._left);
-            const auto* rightScalar = requireScalar(*binary._right);
-            const auto typesKnown = leftType != nullptr && rightType != nullptr;
-            const auto bothReal = hasScalarType(
-                                      leftType, ScalarType::Name::Real) &&
-                hasScalarType(rightType, ScalarType::Name::Real);
-            const auto bothText = hasScalarType(
-                                      leftType, ScalarType::Name::Text) &&
-                hasScalarType(rightType, ScalarType::Name::Text);
-            if( leftScalar != nullptr && rightScalar != nullptr && typesKnown && !bothReal && !bothText )
-                _context.report(binary, std::format("'{}' գործողության օպերանդները պետք է լինեն երկու REAL կամ երկու TEXT արժեք։", binary._operation));
-            result = &scalarType(ScalarType::Name::Bool);
-            break;
-        }
+        case Operation::Le:
+            return cacheType(binary, typeOfComparison(binary));
         case Operation::And:
         case Operation::Or:
-            result = &scalarType(ScalarType::Name::Bool);
-            validateScalarOperands(binary, *result);
-            break;
+            return cacheType(binary, typeOfLogical(binary));
         case Operation::Conc:
-            result = &scalarType(ScalarType::Name::Text);
-            validateScalarOperands(binary, *result);
-            break;
-        case Operation::Index: {
-            const auto array = leftType != nullptr && leftType->isArray();
-            if( leftType != nullptr && !array )
-                _context.report(*binary._left, "Ինդեքսավորվող արտահայտությունը զանգված չէ։");
-            validateIndex(*binary._right);
-            if( array )
-                result = &leftType->base();
-            break;
-        }
+            return cacheType(binary, typeOfConcatenation(binary));
+        case Operation::Index:
+            if( const auto* result = typeOfIndex(binary) )
+                return cacheType(binary, *result);
+            return nullptr;
         case Operation::Not:
         case Operation::None:
             std::unreachable();
     }
+}
 
-    return result == nullptr ? nullptr : remember(binary, *result);
+const Type& TypeCheckingPass::typeOfArithmetic(const Binary& binary)
+{
+    const auto& result = scalarType(ScalarType::Name::Real);
+    validateScalarOperands(binary, result);
+    return result;
+}
+
+const Type& TypeCheckingPass::typeOfEquality(const Binary& binary)
+{
+    const auto* leftType = typeOf(*binary._left);
+    const auto* rightType = typeOf(*binary._right);
+    const auto* leftScalar = requireScalar(*binary._left);
+    const auto* rightScalar = requireScalar(*binary._right);
+    const auto typesKnown = leftType != nullptr && rightType != nullptr;
+    const auto typesMatch = typesKnown && *leftType == *rightType;
+    if( leftScalar != nullptr && rightScalar != nullptr && typesKnown && !typesMatch )
+        _context.report(binary, std::format("'{}' գործողության օպերանդները պետք է լինեն նույն տիպի։", binary._operation));
+    return scalarType(ScalarType::Name::Bool);
+}
+
+const Type& TypeCheckingPass::typeOfComparison(const Binary& binary)
+{
+    const auto* leftType = typeOf(*binary._left);
+    const auto* rightType = typeOf(*binary._right);
+    const auto* leftScalar = requireScalar(*binary._left);
+    const auto* rightScalar = requireScalar(*binary._right);
+    const auto typesKnown = leftType != nullptr && rightType != nullptr;
+    const auto bothReal = hasScalarType(leftType, ScalarType::Name::Real) && hasScalarType(rightType, ScalarType::Name::Real);
+    const auto bothText = hasScalarType(leftType, ScalarType::Name::Text) && hasScalarType(rightType, ScalarType::Name::Text);
+    if( leftScalar != nullptr && rightScalar != nullptr && typesKnown && !bothReal && !bothText )
+        _context.report(binary, std::format("'{}' գործողության օպերանդները պետք է լինեն երկու REAL կամ երկու TEXT արժեք։", binary._operation));
+    return scalarType(ScalarType::Name::Bool);
+}
+
+const Type& TypeCheckingPass::typeOfLogical(const Binary& binary)
+{
+    const auto& result = scalarType(ScalarType::Name::Bool);
+    validateScalarOperands(binary, result);
+    return result;
+}
+
+const Type& TypeCheckingPass::typeOfConcatenation(const Binary& binary)
+{
+    const auto& result = scalarType(ScalarType::Name::Text);
+    validateScalarOperands(binary, result);
+    return result;
+}
+
+const Type* TypeCheckingPass::typeOfIndex(const Binary& binary)
+{
+    const auto* leftType = typeOf(*binary._left);
+    const auto array = leftType != nullptr && leftType->isArray();
+    if( leftType != nullptr && !array )
+        _context.report(*binary._left, "Ինդեքսավորվող արտահայտությունը զանգված չէ։");
+    validateIndex(*binary._right);
+    return array ? &leftType->base() : nullptr;
 }
 
 const Type* TypeCheckingPass::typeOf(const Apply& apply)
@@ -396,36 +412,31 @@ const Type* TypeCheckingPass::typeOf(const Apply& apply)
     if( !subroutine->signature.returnType )
         _context.report(apply, std::format("'{}' ենթածրագիրը արժեք չի վերադարձնում։", apply._callee));
     else
-        result = remember(apply, *subroutine->signature.returnType);
+        result = cacheType(apply, *subroutine->signature.returnType);
 
-    validateArguments(apply, apply._callee, apply._arguments, types,
-        subroutine->signature);
+    validateArguments(apply, apply._callee, apply._arguments, types, subroutine->signature);
     return result;
 }
 
-const Type* TypeCheckingPass::remember(
-    const Expression& expression, const Type& type)
+const Type* TypeCheckingPass::cacheType(const Expression& expression, const Type& type)
 {
     _context.model.setType(expression.id(), type);
     return &type;
 }
 
-const VariableSymbol* TypeCheckingPass::boundVariable(
-    const Variable& variable) const
+const VariableSymbol* TypeCheckingPass::boundVariable(const Variable& variable) const
 {
     const auto id = _context.model.symbol(variable.id());
     return id ? _context.symbols.variable(*id) : nullptr;
 }
 
-const SubroutineSymbol* TypeCheckingPass::boundSubroutine(
-    const Node& node) const
+const SubroutineSymbol* TypeCheckingPass::boundSubroutine(const Node& node) const
 {
     const auto id = _context.model.symbol(node.id());
     return id ? _context.symbols.subroutine(*id) : nullptr;
 }
 
-std::vector<const Type*> TypeCheckingPass::argumentTypes(
-    const std::vector<Expression::Ptr>& arguments)
+std::vector<const Type*> TypeCheckingPass::argumentTypes(const std::vector<Expression::Ptr>& arguments)
 {
     std::vector<const Type*> types;
     types.reserve(arguments.size());
@@ -434,10 +445,7 @@ std::vector<const Type*> TypeCheckingPass::argumentTypes(
     return types;
 }
 
-void TypeCheckingPass::validateArguments(const Node& node,
-    std::string_view name, const std::vector<Expression::Ptr>& arguments,
-    const std::vector<const Type*>& argumentTypes,
-    const SubroutineSignature& signature)
+void TypeCheckingPass::validateArguments(const Node& node, std::string_view name, const std::vector<Expression::Ptr>& arguments, const std::vector<const Type*>& argumentTypes, const SubroutineSignature& signature)
 {
     const auto expectedCount = signature.parameters.size();
     const auto actualCount = arguments.size();
@@ -497,8 +505,7 @@ const Type* TypeCheckingPass::requireScalar(const Expression& expression)
     return nullptr;
 }
 
-void TypeCheckingPass::validateScalarOperands(
-    const Binary& binary, const Type& expected)
+void TypeCheckingPass::validateScalarOperands(const Binary& binary, const Type& expected)
 {
     const auto* left = requireScalar(*binary._left);
     const auto* right = requireScalar(*binary._right);

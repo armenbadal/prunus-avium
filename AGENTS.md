@@ -42,6 +42,9 @@ clang-format --dry-run --Werror src/*.cxx src/*.hxx tests/*.cxx
 Use four spaces, no tabs; classes and public types use `PascalCase`, methods
 and variables use `camelCase`, and private data members use a leading
 underscore (for example, `_line`). Keep code in the `avium` namespace.
+Never split a code statement or declaration across multiple lines merely
+because it is long. Preserve long lines; use a multiline layout only when the
+code's structure, rather than its length, requires it.
 
 ## Testing Guidelines
 
