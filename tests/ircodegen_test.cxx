@@ -28,7 +28,9 @@ TEST_CASE("IR code generator emits an empty Main and a C entry point", "[ircodeg
     REQUIRE(analyzer.analyze(*program));
 
     llvm::LLVMContext context;
-    auto module = IRCodeGen{context, *program, symbols, model}.generate();
+    auto generated = IRCodeGen{context, *program, symbols, model}.generate();
+    REQUIRE(generated);
+    auto module = std::move(*generated);
 
     REQUIRE(module != nullptr);
     CHECK(module->getTargetTriple().str() == llvm::sys::getDefaultTargetTriple());
@@ -83,7 +85,9 @@ TEST_CASE("IR code generator declares and emits every subroutine before the C en
     REQUIRE(helperSymbol.has_value());
 
     llvm::LLVMContext context;
-    auto module = IRCodeGen{context, *program, symbols, model}.generate();
+    auto generated = IRCodeGen{context, *program, symbols, model}.generate();
+    REQUIRE(generated);
+    auto module = std::move(*generated);
 
     REQUIRE(module != nullptr);
     CHECK_FALSE(llvm::verifyModule(*module));
@@ -92,4 +96,25 @@ TEST_CASE("IR code generator declares and emits every subroutine before the C en
     REQUIRE(function != nullptr);
     REQUIRE(function->size() == 1);
     CHECK(llvm::isa<llvm::ReturnInst>(function->getEntryBlock().getTerminator()));
+}
+
+TEST_CASE("IR code generator returns an error for an unsupported AST node", "[ircodegen]")
+{
+    auto declaration = node<Dim>("Value", node<ScalarType>(ScalarType::Name::Real, 4), 4);
+    auto main = node<Subroutine>("Main", NodeList<Parameter>{}, nullptr,
+        node<Sequence>(NodeList<Statement>{std::move(declaration)}, 1), 1);
+    auto program = node<Program>(NodeList<Subroutine>{std::move(main)}, 1);
+    SymbolTable symbols;
+    SemanticModel model;
+    Diagnostics diagnostics;
+    SemanticContext semanticContext{symbols, model, diagnostics};
+    SemanticAnalyzer analyzer{semanticContext};
+    REQUIRE(analyzer.analyze(*program));
+
+    llvm::LLVMContext context;
+    auto result = IRCodeGen{context, *program, symbols, model}.generate();
+
+    REQUIRE_FALSE(result);
+    CHECK(std::get<0>(result.error()) == 4);
+    CHECK(std::get<1>(result.error()) == "IR code generation does not support this AST node");
 }

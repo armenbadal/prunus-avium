@@ -1,9 +1,11 @@
 #pragma once
 
 #include "ast.hxx"
+#include "diagnostics.hxx"
 
 #include <llvm/IR/IRBuilder.h>
 
+#include <expected>
 #include <memory>
 
 namespace llvm {
@@ -26,32 +28,32 @@ class IRCodeGen {
 public:
     IRCodeGen(llvm::LLVMContext& context, Program& program, const SymbolTable& symbols, const SemanticModel& model);
 
-    std::unique_ptr<llvm::Module> generate();
+    std::expected<std::unique_ptr<llvm::Module>, Error> generate();
 
 private:
     void declareSubroutines();
-    void emitSubroutines();
-    void emitMainWrapper();
+    std::expected<void, Error> emitSubroutines();
+    std::expected<void, Error> emitMainWrapper();
 
-    void emit(Subroutine& node);
-    void emit(Sequence& node);
-    void emit(Statement& node);
-    void emit(Dim& node);
-    void emit(Let& node);
-    void emit(If& node);
-    void emit(While& node);
-    void emit(For& node);
-    void emit(Call& node);
-    void emit(Return& node);
+    std::expected<void, Error> emit(Subroutine& node);
+    std::expected<void, Error> emit(Sequence& node);
+    std::expected<void, Error> emit(Statement& node);
+    std::expected<void, Error> emit(Dim& node);
+    std::expected<void, Error> emit(Let& node);
+    std::expected<void, Error> emit(If& node);
+    std::expected<void, Error> emit(While& node);
+    std::expected<void, Error> emit(For& node);
+    std::expected<void, Error> emit(Call& node);
+    std::expected<void, Error> emit(Return& node);
 
-    llvm::Value* emit(Expression& node);
-    llvm::Value* emit(Apply& node);
-    llvm::Value* emit(Binary& node);
-    llvm::Value* emit(Unary& node);
-    llvm::Value* emit(Variable& node);
-    llvm::Value* emit(Text& node);
-    llvm::Value* emit(Number& node);
-    llvm::Value* emit(Boolean& node);
+    std::expected<llvm::Value*, Error> emit(Expression& node);
+    std::expected<llvm::Value*, Error> emit(Apply& node);
+    std::expected<llvm::Value*, Error> emit(Binary& node);
+    std::expected<llvm::Value*, Error> emit(Unary& node);
+    std::expected<llvm::Value*, Error> emit(Variable& node);
+    std::expected<llvm::Value*, Error> emit(Text& node);
+    std::expected<llvm::Value*, Error> emit(Number& node);
+    std::expected<llvm::Value*, Error> emit(Boolean& node);
 
     llvm::FunctionType* createFunctionType(const SubroutineSignature& ss) const;
     llvm::Type* fromCerasusType(const ScalarType& t) const;

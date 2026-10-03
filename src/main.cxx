@@ -65,7 +65,12 @@ int main(int argc, char* argv[])
     llvm::LLVMContext context;
     avium::IRCodeGen codeGenerator{context, *program, symbols, model};
     auto module = codeGenerator.generate();
-    module->print(llvm::outs(), nullptr);
+    if( !module ) {
+        const auto& [line, message] = module.error();
+        std::cerr << source.string() << ':' << line << ": " << message << '\n';
+        return EXIT_FAILURE;
+    }
+    (*module)->print(llvm::outs(), nullptr);
 
     return EXIT_SUCCESS;
 }
