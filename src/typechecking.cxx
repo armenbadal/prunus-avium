@@ -62,7 +62,7 @@ private:
     const VariableSymbol* boundVariable(const Variable& variable) const;
     const SubroutineSymbol* boundSubroutine(const Node& node) const;
     std::vector<const Type*> argumentTypes(const std::vector<Expression::Ptr>& arguments);
-    void validateArguments(const Node& node, std::string_view name, const std::vector<Expression::Ptr>& arguments, const std::vector<const Type*>& argumentTypes, const SubroutineSignature& signature);
+    void validateArguments(const Node& node, const SubroutineSymbol& subroutine, const std::vector<Expression::Ptr>& arguments, const std::vector<const Type*>& argumentTypes);
     const Type* requireScalar(const Expression& expression);
     void validateScalarOperands(const Binary& binary, const Type& expected);
     void validateIndex(const Expression& index);
@@ -223,7 +223,7 @@ void TypeCheckingPass::check(const Call& call)
 
     if( subroutine->signature.returnType )
         _context.report(call, "CALL-ով կարելի է կանչել միայն պրոցեդուրա։");
-    validateArguments(call, call._callee, call._arguments, types, subroutine->signature);
+    validateArguments(call, *subroutine, call._arguments, types);
 }
 
 void TypeCheckingPass::check(const Return& statement)
@@ -414,7 +414,7 @@ const Type* TypeCheckingPass::typeOf(const Apply& apply)
     else
         result = cacheType(apply, *subroutine->signature.returnType);
 
-    validateArguments(apply, apply._callee, apply._arguments, types, subroutine->signature);
+    validateArguments(apply, *subroutine, apply._arguments, types);
     return result;
 }
 
@@ -445,8 +445,10 @@ std::vector<const Type*> TypeCheckingPass::argumentTypes(const std::vector<Expre
     return types;
 }
 
-void TypeCheckingPass::validateArguments(const Node& node, std::string_view name, const std::vector<Expression::Ptr>& arguments, const std::vector<const Type*>& argumentTypes, const SubroutineSignature& signature)
+void TypeCheckingPass::validateArguments(const Node& node, const SubroutineSymbol& subroutine, const std::vector<Expression::Ptr>& arguments, const std::vector<const Type*>& argumentTypes)
 {
+    const auto& name = subroutine.name;
+    const auto& signature = subroutine.signature;
     const auto expectedCount = signature.parameters.size();
     const auto actualCount = arguments.size();
     if( actualCount != expectedCount )

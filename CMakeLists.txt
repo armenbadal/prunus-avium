@@ -8,6 +8,11 @@ find_package(LLVM CONFIG REQUIRED)
 
 separate_arguments(AVIUM_LLVM_DEFINITIONS NATIVE_COMMAND
     "${LLVM_DEFINITIONS}")
+llvm_map_components_to_libnames(AVIUM_LLVM_LIBRARIES
+    Core
+    Support
+    Target
+    native)
 
 add_subdirectory(runtime)
 
@@ -30,7 +35,6 @@ target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE
 target_compile_options(${PROJECT_NAME} PRIVATE
     ${AVIUM_LLVM_DEFINITIONS})
 target_link_libraries(${PROJECT_NAME} PRIVATE
-    LLVMCore
-    LLVMSupport)
+    ${AVIUM_LLVM_LIBRARIES})
 
 add_subdirectory(tests)
