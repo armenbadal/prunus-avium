@@ -250,21 +250,19 @@ END SUB
 ցիկլերի մարմիններն առանձին տիրույթներ չեն ստեղծում, ներսում հայտարարված անունը
 պետք է ճանաչելի լինի ամբողջ ենթածրագրում՝ նույնիսկ հայտարարումից առաջ։
 
-Այս պատճառով Կեռասի իմաստային վերլուծիչն աշխատում է երկու հիմնական անցումով.
+Այս պատճառով Կեռասի իմաստային վերլուծիչն աշխատանքը բաժանում է երեք հստակ փուլի.
 
 ```text
 Program AST
-    |
-    +-- NameResolutionPass --> SymbolTable + անունների կապեր + Diagnostics
-    |
-    +-- TypeCheckingPass   --> արտահայտությունների տիպեր + Diagnostics
+    +-- NameDeclarationPass --> SymbolTable + հայտարարումների կապեր
+    +-- NameResolutionPass  --> օգտագործումների կապեր + Diagnostics
+    +-- TypeCheckingPass    --> արտահայտությունների տիպեր + Diagnostics
 ```
 
-Առաջին անցումով՝ `NameResolutionPass`-ով, որոշվում են անունների դերերը և
-կառուցվում է սիմվոլների աղյուսակը։ Երկրորդով՝ `TypeCheckingPass`-ով,
-հաշվարկվում են արտահայտությունների տիպերն ու ստուգվում լեզվի տիպային կանոնները։
-Երկու անցումներն էլ կարող են ախտորոշումներ ավելացնել ընդհանուր `Diagnostics`
-օբյեկտում։
+`NameDeclarationPass`-ը ստեղծում է սիմվոլները, `NameResolutionPass`-ը
+անունների օգտագործումները կապում է դրանց, իսկ `TypeCheckingPass`-ը հաշվարկում
+է արտահայտությունների տիպերն ու ստուգում լեզվի տիպային կանոնները։ Բոլոր փուլերը
+կարող են ախտորոշումներ ավելացնել ընդհանուր `Diagnostics` օբյեկտում։
 
 Այս դասերը սահմանված են `semantic.cxx` ֆայլի անանուն անունների տիրույթում։
 Դրանք իրականացման ներքին մանրամասներ են և կոմպիլյատորի մնացած մասերին
@@ -273,20 +271,16 @@ Program AST
 
 ## Անունների դերերի որոշումը
 
-`NameResolutionPass`-ը `ASTVisitor`-ից ածանցված դաս է։ Այն անցնում է ծառի
-հանգույցներով, հայտարարումների համար նոր սիմվոլներ է ստեղծում, իսկ անունների
-օգտագործումները կապում է արդեն ստեղծված սիմվոլներին։ Ծրագրի մակարդակում
-աշխատանքի հերթականությունը հետևյալն է.
+`NameDeclarationPass`-ը հայտարարումների համար նոր սիմվոլներ է ստեղծում, իսկ
+`NameResolutionPass`-ը անունների օգտագործումները կապում է արդեն ստեղծված
+սիմվոլներին։ Ծրագրի մակարդակի հայտարարումները կատարվում են այսպես.
 
 ```cpp
-void NameResolutionPass::visit(Program& program)
+void NameDeclarationPass::declareGlobals(const Program& program)
 {
     declareBuiltins();
     declareSubroutines(program);
     resolveEntryPoint(program);
-
-    for( const auto& subroutine : program._subroutines )
-        visit(*subroutine);
 }
 ```
 
@@ -334,16 +328,9 @@ END SUB
 գրանցվում են պարամետրերը, ապա՝ մարմնի բոլոր լոկալ հայտարարումները։ Միայն
 դրանից հետո է սկսվում անունների օգտագործումները լուծող անցումը։
 
-```cpp
-void NameResolutionPass::visit(Subroutine& subroutine)
-{
-    _symbols.openScope();
-    declareParameters(subroutine);
-    declareLocals(*subroutine._body);
-    visit(*subroutine._body);
-    _symbols.closeScope();
-}
-```
+`SemanticAnalyzer`-ը յուրաքանչյուր ենթածրագրի համար բացում է նոր տիրույթ,
+կանչում `NameDeclarationPass::declareLocals()`-ը, ապա նույն բաց տիրույթում՝
+`NameResolutionPass::resolve()`-ը։ Դրանից հետո տիրույթը փակվում է։
 
 `declareLocals()` մեթոդը ռեկուրսիվ անցնում է `IF`, `WHILE` ու `FOR`
 կառուցվածքների մարմիններով և հավաքում այնտեղ հանդիպող `DIM` հայտարարումները։
@@ -426,7 +413,7 @@ const Type* TypeCheckingPass::expressionType(Expression& expression)
     if( const auto type = _model.type(expression.id()) )
         return type;
 
-    visit(expression);
+    check(expression);
     return _model.type(expression.id());
 }
 ```
@@ -438,15 +425,15 @@ const Type* TypeCheckingPass::expressionType(Expression& expression)
 չի լինում։
 
 Լիտերալների տիպերը որոշվում են անմիջապես. `Boolean`-ը `BOOL` է, `Number`-ը՝
-`REAL`, իսկ `Text`-ը՝ `TEXT`։ Փոփոխականի տիպը վերցվում է առաջին անցումով
+`REAL`, իսկ `Text`-ը՝ `TEXT`։ Փոփոխականի տիպը վերցվում է անունների լուծման փուլում
 կապված `VariableSymbol`-ից։ Եթե անունը չի լուծվել, ապա տիպի փոխարեն
 վերադարձվում է `nullptr`։ Դա հատուկ «անհայտ» տիպ չէ. պարզապես նշանակում է,
 որ տվյալ արտահայտության մասին հավաստի տիպային տեղեկություն չունենք։
 
 Այս մոտեցումը կարևոր է սխալների հաղորդման համար։ Եթե փոփոխականն անծանոթ է,
 ապա նրա մասնակցությամբ գործողության համար երկրորդ՝ «սխալ տիպ» հաղորդագրություն
-տալ պետք չէ։ Բուն պատճառի՝ անծանոթ անվան մասին սխալն արդեն գրանցված է առաջին
-անցումով։
+տալ պետք չէ։ Բուն պատճառի՝ անծանոթ անվան մասին սխալն արդեն գրանցված է անունների
+լուծման փուլում։
 
 
 ### Միտեղանի և երկտեղանի գործողությունները
@@ -628,7 +615,7 @@ const auto& boolean = scalarType(ScalarType::Name::Bool);
 ## Սխալների կուտակումը
 
 Ինչպես շարահյուսական վերլուծիչը, իմաստային վերլուծիչն էլ առաջին սխալի վրա չի
-կանգնում։ Երկու անցումների `report()` մեթոդները հաղորդագրությունն ու հանգույցի
+կանգնում։ Անցումների `report()` մեթոդները հաղորդագրությունն ու հանգույցի
 տողի համարը փոխանցում են ընդհանուր `Diagnostics` օբյեկտին, ապա ծառի անցումը
 շարունակվում է այնքանով, որքանով առկա տվյալները վստահելի են։
 
@@ -644,17 +631,25 @@ const auto& boolean = scalarType(ScalarType::Name::Bool);
 է նաև բաց թողնվածների քանակը։ Այս սահմանը թույլ չի տալիս, որ անհաջող
 վերլուծությունը լցնի հիշողությունը իրար հաջորդող հազարավոր հաղորդագրություններով։
 
-`SemanticAnalyzer::analyze()` մեթոդը հերթով գործարկում է երկու անցումները և
+`SemanticAnalyzer::analyze()` մեթոդը հերթով գործարկում է փուլերը և
 վերադարձնում է `true`, եթե ոչ մի ախտորոշում չի գրանցվել.
 
 ```cpp
 bool SemanticAnalyzer::analyze(Program& program)
 {
+    NameDeclarationPass declarations{_symbols, _model, _diagnostics};
+    declarations.declareGlobals(program);
+
     NameResolutionPass nameResolution{_symbols, _model, _diagnostics};
-    nameResolution.visit(program);
+    for( const auto& subroutine : program._subroutines ) {
+        _symbols.openScope();
+        declarations.declareLocals(*subroutine);
+        nameResolution.resolve(*subroutine);
+        _symbols.closeScope();
+    }
 
     TypeCheckingPass typeChecking{_symbols, _model, _diagnostics};
-    typeChecking.visit(program);
+    typeChecking.check(program);
 
     return _diagnostics.count() == 0;
 }

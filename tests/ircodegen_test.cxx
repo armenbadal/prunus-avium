@@ -12,12 +12,8 @@
 #include <llvm/IR/Verifier.h>
 #include <llvm/TargetParser/Host.h>
 
-#include <concepts>
-
 using namespace avium;
 using test::NodeList;
-
-static_assert(std::derived_from<IRCodeGen, ASTVisitor<IRCodeGen>>);
 
 TEST_CASE("IR code generator emits an empty Main and a C entry point", "[ircodegen]")
 {
@@ -64,4 +60,34 @@ TEST_CASE("IR code generator emits an empty Main and a C entry point", "[ircodeg
     CHECK(entryFunction->getName() == "avium.subroutine." + std::to_string(*entryPoint));
     REQUIRE(entryFunction->size() == 1);
     CHECK(llvm::isa<llvm::ReturnInst>(entryFunction->getEntryBlock().getTerminator()));
+}
+
+TEST_CASE("IR code generator declares and emits every subroutine before the C entry point", "[ircodegen]")
+{
+    auto helper = node<Subroutine>("Helper", NodeList<Parameter>{}, nullptr,
+        node<Sequence>(NodeList<Statement>{}, 1), 1);
+    const auto helperId = helper->id();
+    auto main = node<Subroutine>("Main", NodeList<Parameter>{}, nullptr,
+        node<Sequence>(NodeList<Statement>{}, 2), 2);
+    auto program = node<Program>(
+        NodeList<Subroutine>{std::move(helper), std::move(main)}, 1);
+    SymbolTable symbols;
+    SemanticModel model;
+    Diagnostics diagnostics;
+    SemanticAnalyzer analyzer{symbols, model, diagnostics};
+    REQUIRE(analyzer.analyze(*program));
+
+    const auto helperSymbol = model.symbol(helperId);
+    REQUIRE(helperSymbol.has_value());
+
+    llvm::LLVMContext context;
+    auto module = IRCodeGen{context, *program, symbols, model}.generate();
+
+    REQUIRE(module != nullptr);
+    CHECK_FALSE(llvm::verifyModule(*module));
+    const auto* function = module->getFunction(
+        "avium.subroutine." + std::to_string(*helperSymbol));
+    REQUIRE(function != nullptr);
+    REQUIRE(function->size() == 1);
+    CHECK(llvm::isa<llvm::ReturnInst>(function->getEntryBlock().getTerminator()));
 }

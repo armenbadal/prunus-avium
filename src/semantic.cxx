@@ -1,5 +1,4 @@
 #include "semantic.hxx"
-#include "astvisitor.hxx"
 #include "formatters.hxx"
 
 #include <algorithm>
@@ -142,38 +141,12 @@ const Type* SemanticModel::type(NodeId node) const
 
 namespace {
 
-class NameResolutionPass : public ASTVisitor<NameResolutionPass> {
+class NameDeclarationPass {
 public:
-    NameResolutionPass(SymbolTable& symbols, SemanticModel& model, Diagnostics& diagnostics);
+    NameDeclarationPass(SymbolTable& symbols, SemanticModel& model, Diagnostics& diagnostics);
 
-    using ASTVisitor<NameResolutionPass>::visit;
-
-    void visit(Program& node);
-    void visit(Subroutine& node);
-    void visit(Sequence& node);
-    void visit(Dim& node);
-    void visit(Let& node);
-    void visit(If& node);
-    void visit(IfBranch& node);
-    void visit(While& node);
-    void visit(For& node);
-    void visit(Call& node);
-    void visit(Return& node);
-
-    void visit(ScalarType&) {}
-
-    void visit(ArrayType& node);
-
-    void visit(Boolean&) {}
-
-    void visit(Number&) {}
-
-    void visit(Text&) {}
-
-    void visit(Variable& node);
-    void visit(Unary& node);
-    void visit(Binary& node);
-    void visit(Apply& node);
+    void declareGlobals(const Program& program);
+    void declareLocals(const Subroutine& subroutine);
 
 private:
     void declareBuiltins();
@@ -184,6 +157,26 @@ private:
     void declareDim(const Dim& dim);
     void declareForVariable(const For& loop);
 
+    void report(const Node& node, std::string_view message);
+
+    SymbolTable& _symbols;
+    SemanticModel& _model;
+    Diagnostics& _diagnostics;
+};
+
+class NameResolutionPass {
+public:
+    NameResolutionPass(SymbolTable& symbols, SemanticModel& model, Diagnostics& diagnostics);
+
+    void resolve(Subroutine& subroutine);
+
+private:
+    void resolve(Sequence& sequence);
+    void resolve(Statement& statement);
+    void resolve(IfBranch& branch);
+    void resolve(Expression& expression);
+    void resolve(Type& type);
+
     std::optional<SymbolId> resolveVariable(const Variable& variable);
     std::optional<SymbolId> resolveSubroutine(const Node& node, std::string_view name);
     void report(const Node& node, std::string_view message);
@@ -193,37 +186,34 @@ private:
     Diagnostics& _diagnostics;
 };
 
-class TypeCheckingPass : public ASTVisitor<TypeCheckingPass> {
+class TypeCheckingPass {
 public:
     TypeCheckingPass(SymbolTable& symbols, SemanticModel& model, Diagnostics& diagnostics);
 
-    using ASTVisitor<TypeCheckingPass>::visit;
-
-    void visit(Program& node);
-    void visit(Subroutine& node);
-    void visit(Sequence& node);
-    void visit(Dim& node);
-    void visit(Let& node);
-    void visit(If& node);
-    void visit(IfBranch& node);
-    void visit(While& node);
-    void visit(For& node);
-    void visit(Call& node);
-    void visit(Return& node);
-
-    void visit(ScalarType&) {}
-
-    void visit(ArrayType&) {}
-
-    void visit(Boolean& node);
-    void visit(Number& node);
-    void visit(Text& node);
-    void visit(Variable& node);
-    void visit(Unary& node);
-    void visit(Binary& node);
-    void visit(Apply& node);
+    void check(Program& program);
 
 private:
+    void check(Subroutine& subroutine);
+    void check(Sequence& sequence);
+    void check(Statement& statement);
+    void check(Dim& node);
+    void check(Let& node);
+    void check(If& node);
+    void check(IfBranch& node);
+    void check(While& node);
+    void check(For& node);
+    void check(Call& node);
+    void check(Return& node);
+
+    void check(Expression& expression);
+    void check(Boolean& node);
+    void check(Number& node);
+    void check(Text& node);
+    void check(Variable& node);
+    void check(Unary& node);
+    void check(Binary& node);
+    void check(Apply& node);
+
     std::optional<SymbolId> boundVariable(const Variable& variable);
     std::optional<SymbolId> boundSubroutine(const Node& node);
     void validateArguments(const Node& node, std::string_view name, const std::vector<Expression::Ptr>& arguments, const SubroutineSignature& signature);
@@ -241,132 +231,33 @@ private:
     const ScalarType* _currentReturnType{nullptr};
 };
 
-NameResolutionPass::NameResolutionPass(SymbolTable& symbols, SemanticModel& model, Diagnostics& diagnostics)
+NameDeclarationPass::NameDeclarationPass(SymbolTable& symbols, SemanticModel& model, Diagnostics& diagnostics)
     : _symbols{symbols}
     , _model{model}
     , _diagnostics{diagnostics}
 {
 }
 
-void NameResolutionPass::visit(Program& program)
+void NameDeclarationPass::declareGlobals(const Program& program)
 {
     declareBuiltins();
     declareSubroutines(program);
     resolveEntryPoint(program);
-
-    for( const auto& subroutine : program._subroutines )
-        visit(*subroutine);
 }
 
-void NameResolutionPass::visit(Subroutine& subroutine)
+void NameDeclarationPass::declareLocals(const Subroutine& subroutine)
 {
-    _symbols.openScope();
     declareParameters(subroutine);
     declareLocals(*subroutine._body);
-    visit(*subroutine._body);
-    _symbols.closeScope();
 }
 
-void NameResolutionPass::visit(Sequence& sequence)
-{
-    for( const auto& statement : sequence._items )
-        visit(*statement);
-}
-
-void NameResolutionPass::visit(Dim& dim)
-{
-    if( dim._type->isArray() ) {
-        const auto& array = static_cast<const ArrayType&>(*dim._type);
-        if( array._size )
-            visit(*array._size);
-    }
-}
-
-void NameResolutionPass::visit(Let& let)
-{
-    resolveVariable(*let._variable);
-    if( let._index )
-        visit(*let._index);
-    visit(*let._value);
-}
-
-void NameResolutionPass::visit(If& conditional)
-{
-    for( const auto& branch : conditional._branches )
-        visit(*branch);
-    if( conditional._alternative )
-        visit(*conditional._alternative);
-}
-
-void NameResolutionPass::visit(IfBranch& branch)
-{
-    visit(*branch._condition);
-    visit(*branch._body);
-}
-
-void NameResolutionPass::visit(While& loop)
-{
-    visit(*loop._condition);
-    visit(*loop._body);
-}
-
-void NameResolutionPass::visit(For& loop)
-{
-    resolveVariable(*loop._parameter);
-    visit(*loop._begin);
-    visit(*loop._end);
-    visit(*loop._step);
-    visit(*loop._body);
-}
-
-void NameResolutionPass::visit(Call& call)
-{
-    resolveSubroutine(call, call._callee);
-    for( const auto& argument : call._arguments )
-        visit(*argument);
-}
-
-void NameResolutionPass::visit(Return& statement)
-{
-    visit(*statement._value);
-}
-
-void NameResolutionPass::visit(ArrayType& array)
-{
-    if( array._size )
-        visit(*array._size);
-}
-
-void NameResolutionPass::visit(Variable& variable)
-{
-    resolveVariable(variable);
-}
-
-void NameResolutionPass::visit(Unary& unary)
-{
-    visit(*unary._operand);
-}
-
-void NameResolutionPass::visit(Binary& binary)
-{
-    visit(*binary._left);
-    visit(*binary._right);
-}
-
-void NameResolutionPass::visit(Apply& apply)
-{
-    resolveSubroutine(apply, apply._callee);
-    for( const auto& argument : apply._arguments )
-        visit(*argument);
-}
-
-void NameResolutionPass::declareBuiltins()
+void NameDeclarationPass::declareBuiltins()
 {
     for( const auto& subroutine : builtinSubroutines() )
         _symbols.declareSubroutine(subroutine);
 }
 
-void NameResolutionPass::declareSubroutines(const Program& program)
+void NameDeclarationPass::declareSubroutines(const Program& program)
 {
     for( const auto& subroutine : program._subroutines ) {
         std::vector<const Type*> parameters;
@@ -390,7 +281,7 @@ void NameResolutionPass::declareSubroutines(const Program& program)
     }
 }
 
-void NameResolutionPass::resolveEntryPoint(const Program& program)
+void NameDeclarationPass::resolveEntryPoint(const Program& program)
 {
     const Subroutine* main = nullptr;
     for( const auto& subroutine : program._subroutines )
@@ -410,7 +301,7 @@ void NameResolutionPass::resolveEntryPoint(const Program& program)
         report(*main, "'Main' ենթածրագիրը արժեք չի կարող վերադարձնել։");
 }
 
-void NameResolutionPass::declareParameters(const Subroutine& subroutine)
+void NameDeclarationPass::declareParameters(const Subroutine& subroutine)
 {
     for( const auto& parameter : subroutine._parameters ) {
         const auto id = _symbols.declareVariable(parameter->_name, *parameter->_type, VariableStorage::Parameter);
@@ -421,7 +312,7 @@ void NameResolutionPass::declareParameters(const Subroutine& subroutine)
     }
 }
 
-void NameResolutionPass::declareLocals(const Sequence& sequence)
+void NameDeclarationPass::declareLocals(const Sequence& sequence)
 {
     for( const auto& statement : sequence._items )
         switch( statement->kind ) {
@@ -450,7 +341,7 @@ void NameResolutionPass::declareLocals(const Sequence& sequence)
         }
 }
 
-void NameResolutionPass::declareDim(const Dim& dim)
+void NameDeclarationPass::declareDim(const Dim& dim)
 {
     const auto id = _symbols.declareVariable(dim._name, *dim._type, VariableStorage::Local);
     if( id == UnknownSymbol )
@@ -459,7 +350,7 @@ void NameResolutionPass::declareDim(const Dim& dim)
         _model.bind(dim.id(), id);
 }
 
-void NameResolutionPass::declareForVariable(const For& loop)
+void NameDeclarationPass::declareForVariable(const For& loop)
 {
     const auto& name = loop._parameter->_name;
     if( _symbols.declaredInCurrentScope(name) ) {
@@ -473,6 +364,137 @@ void NameResolutionPass::declareForVariable(const For& loop)
 
     const auto id = _symbols.declareVariable(name, scalarType(ScalarType::Name::Real), VariableStorage::ForVariable);
     _model.bind(loop._parameter->id(), id);
+}
+
+void NameDeclarationPass::report(const Node& node, std::string_view message)
+{
+    _diagnostics.advance();
+    _diagnostics.mark(node.line, message);
+}
+
+NameResolutionPass::NameResolutionPass(SymbolTable& symbols, SemanticModel& model, Diagnostics& diagnostics)
+    : _symbols{symbols}
+    , _model{model}
+    , _diagnostics{diagnostics}
+{
+}
+
+void NameResolutionPass::resolve(Subroutine& subroutine)
+{
+    resolve(*subroutine._body);
+}
+
+void NameResolutionPass::resolve(Sequence& sequence)
+{
+    for( const auto& statement : sequence._items )
+        resolve(*statement);
+}
+
+void NameResolutionPass::resolve(Statement& statement)
+{
+    switch( statement.kind ) {
+        case NodeKind::Dim: {
+            auto& dim = static_cast<Dim&>(statement);
+            resolve(*dim._type);
+            return;
+        }
+        case NodeKind::Let: {
+            auto& let = static_cast<Let&>(statement);
+            resolve(*let._variable);
+            if( let._index )
+                resolve(*let._index);
+            resolve(*let._value);
+            return;
+        }
+        case NodeKind::If: {
+            auto& conditional = static_cast<If&>(statement);
+            for( const auto& branch : conditional._branches )
+                resolve(*branch);
+            if( conditional._alternative )
+                resolve(*conditional._alternative);
+            return;
+        }
+        case NodeKind::While: {
+            auto& loop = static_cast<While&>(statement);
+            resolve(*loop._condition);
+            resolve(*loop._body);
+            return;
+        }
+        case NodeKind::For: {
+            auto& loop = static_cast<For&>(statement);
+            resolve(*loop._parameter);
+            resolve(*loop._begin);
+            resolve(*loop._end);
+            resolve(*loop._step);
+            resolve(*loop._body);
+            return;
+        }
+        case NodeKind::Call: {
+            auto& call = static_cast<Call&>(statement);
+            resolveSubroutine(call, call._callee);
+            for( const auto& argument : call._arguments )
+                resolve(*argument);
+            return;
+        }
+        case NodeKind::Return:
+            resolve(*static_cast<Return&>(statement)._value);
+            return;
+        default:
+            std::unreachable();
+    }
+}
+
+void NameResolutionPass::resolve(IfBranch& branch)
+{
+    resolve(*branch._condition);
+    resolve(*branch._body);
+}
+
+void NameResolutionPass::resolve(Expression& expression)
+{
+    switch( expression.kind ) {
+        case NodeKind::Boolean:
+        case NodeKind::Number:
+        case NodeKind::Text:
+            return;
+        case NodeKind::Variable:
+            resolveVariable(static_cast<Variable&>(expression));
+            return;
+        case NodeKind::Unary:
+            resolve(*static_cast<Unary&>(expression)._operand);
+            return;
+        case NodeKind::Binary: {
+            auto& binary = static_cast<Binary&>(expression);
+            resolve(*binary._left);
+            resolve(*binary._right);
+            return;
+        }
+        case NodeKind::Apply: {
+            auto& apply = static_cast<Apply&>(expression);
+            resolveSubroutine(apply, apply._callee);
+            for( const auto& argument : apply._arguments )
+                resolve(*argument);
+            return;
+        }
+        default:
+            std::unreachable();
+    }
+}
+
+void NameResolutionPass::resolve(Type& type)
+{
+    switch( type.kind ) {
+        case NodeKind::ScalarType:
+            return;
+        case NodeKind::ArrayType: {
+            auto& array = static_cast<ArrayType&>(type);
+            if( array._size )
+                resolve(*array._size);
+            return;
+        }
+        default:
+            std::unreachable();
+    }
 }
 
 std::optional<SymbolId> NameResolutionPass::resolveVariable(const Variable& variable)
@@ -516,16 +538,16 @@ TypeCheckingPass::TypeCheckingPass(SymbolTable& symbols, SemanticModel& model, D
 {
 }
 
-void TypeCheckingPass::visit(Program& program)
+void TypeCheckingPass::check(Program& program)
 {
     for( const auto& subroutine : program._subroutines )
-        visit(*subroutine);
+        check(*subroutine);
 }
 
-void TypeCheckingPass::visit(Subroutine& subroutine)
+void TypeCheckingPass::check(Subroutine& subroutine)
 {
     _currentReturnType = subroutine._returnType.get();
-    visit(*subroutine._body);
+    check(*subroutine._body);
 
     if( subroutine._name != "Main" && _currentReturnType != nullptr && !definitelyReturns(*subroutine._body) )
         report(subroutine, std::format("'{}' ֆունկցիայի ոչ բոլոր կատարման ուղիներն են արժեք վերադարձնում։", subroutine._name));
@@ -533,13 +555,35 @@ void TypeCheckingPass::visit(Subroutine& subroutine)
     _currentReturnType = nullptr;
 }
 
-void TypeCheckingPass::visit(Sequence& sequence)
+void TypeCheckingPass::check(Sequence& sequence)
 {
     for( const auto& statement : sequence._items )
-        visit(*statement);
+        check(*statement);
 }
 
-void TypeCheckingPass::visit(Dim& dim)
+void TypeCheckingPass::check(Statement& statement)
+{
+    switch( statement.kind ) {
+        case NodeKind::Dim:
+            return check(static_cast<Dim&>(statement));
+        case NodeKind::Let:
+            return check(static_cast<Let&>(statement));
+        case NodeKind::If:
+            return check(static_cast<If&>(statement));
+        case NodeKind::While:
+            return check(static_cast<While&>(statement));
+        case NodeKind::For:
+            return check(static_cast<For&>(statement));
+        case NodeKind::Call:
+            return check(static_cast<Call&>(statement));
+        case NodeKind::Return:
+            return check(static_cast<Return&>(statement));
+        default:
+            std::unreachable();
+    }
+}
+
+void TypeCheckingPass::check(Dim& dim)
 {
     if( !dim._type->isArray() )
         return;
@@ -567,7 +611,7 @@ void TypeCheckingPass::visit(Dim& dim)
     }
 }
 
-void TypeCheckingPass::visit(Let& let)
+void TypeCheckingPass::check(Let& let)
 {
     const auto target = boundVariable(*let._variable);
     if( let._index )
@@ -601,15 +645,15 @@ void TypeCheckingPass::visit(Let& let)
         report(*let._value, std::format("'{}' փոփոխականին պետք է վերագրվի {}, բայց ստացվել է {}։", let._variable->_name, targetType, *valueType));
 }
 
-void TypeCheckingPass::visit(If& conditional)
+void TypeCheckingPass::check(If& conditional)
 {
     for( const auto& branch : conditional._branches )
-        visit(*branch);
+        check(*branch);
     if( conditional._alternative )
-        visit(*conditional._alternative);
+        check(*conditional._alternative);
 }
 
-void TypeCheckingPass::visit(IfBranch& branch)
+void TypeCheckingPass::check(IfBranch& branch)
 {
     const auto conditionType = expressionType(*branch._condition);
     const auto scalarCondition = requireScalar(*branch._condition);
@@ -617,10 +661,10 @@ void TypeCheckingPass::visit(IfBranch& branch)
     const auto wrongConditionType = scalarCondition && typeMismatch(conditionType, boolType);
     if( wrongConditionType )
         report(*branch._condition, std::format("Ճյուղավորման պայմանը պետք է լինի BOOL, բայց ստացվել է {}։", *conditionType));
-    visit(*branch._body);
+    check(*branch._body);
 }
 
-void TypeCheckingPass::visit(While& loop)
+void TypeCheckingPass::check(While& loop)
 {
     const auto conditionType = expressionType(*loop._condition);
     const auto scalarCondition = requireScalar(*loop._condition);
@@ -628,12 +672,12 @@ void TypeCheckingPass::visit(While& loop)
     const auto wrongConditionType = scalarCondition && typeMismatch(conditionType, boolType);
     if( wrongConditionType )
         report(*loop._condition, std::format("WHILE-ի պայմանը պետք է լինի BOOL, բայց ստացվել է {}։", *conditionType));
-    visit(*loop._body);
+    check(*loop._body);
 }
 
-void TypeCheckingPass::visit(For& loop)
+void TypeCheckingPass::check(For& loop)
 {
-    visit(*loop._parameter);
+    check(*loop._parameter);
 
     const auto beginType = expressionType(*loop._begin);
     const auto scalarBegin = requireScalar(*loop._begin);
@@ -656,10 +700,10 @@ void TypeCheckingPass::visit(For& loop)
     if( loop._step->_value == 0.0 )
         report(*loop._step, "FOR-ի քայլը չի կարող լինել 0։");
 
-    visit(*loop._body);
+    check(*loop._body);
 }
 
-void TypeCheckingPass::visit(Call& call)
+void TypeCheckingPass::check(Call& call)
 {
     for( const auto& argument : call._arguments )
         expressionType(*argument);
@@ -674,7 +718,7 @@ void TypeCheckingPass::visit(Call& call)
     validateArguments(call, call._callee, call._arguments, subroutine.signature);
 }
 
-void TypeCheckingPass::visit(Return& statement)
+void TypeCheckingPass::check(Return& statement)
 {
     const auto valueType = expressionType(*statement._value);
     const auto scalarValue = requireScalar(*statement._value);
@@ -689,29 +733,51 @@ void TypeCheckingPass::visit(Return& statement)
         report(*statement._value, std::format("Ֆունկցիայից պետք է վերադարձվի {}, բայց ստացվել է {}։", static_cast<const Type&>(*_currentReturnType), *valueType));
 }
 
-void TypeCheckingPass::visit(Boolean& boolean)
+void TypeCheckingPass::check(Expression& expression)
+{
+    switch( expression.kind ) {
+        case NodeKind::Boolean:
+            return check(static_cast<Boolean&>(expression));
+        case NodeKind::Number:
+            return check(static_cast<Number&>(expression));
+        case NodeKind::Text:
+            return check(static_cast<Text&>(expression));
+        case NodeKind::Variable:
+            return check(static_cast<Variable&>(expression));
+        case NodeKind::Unary:
+            return check(static_cast<Unary&>(expression));
+        case NodeKind::Binary:
+            return check(static_cast<Binary&>(expression));
+        case NodeKind::Apply:
+            return check(static_cast<Apply&>(expression));
+        default:
+            std::unreachable();
+    }
+}
+
+void TypeCheckingPass::check(Boolean& boolean)
 {
     _model.setType(boolean.id(), scalarType(ScalarType::Name::Bool));
 }
 
-void TypeCheckingPass::visit(Number& number)
+void TypeCheckingPass::check(Number& number)
 {
     _model.setType(number.id(), scalarType(ScalarType::Name::Real));
 }
 
-void TypeCheckingPass::visit(Text& text)
+void TypeCheckingPass::check(Text& text)
 {
     _model.setType(text.id(), scalarType(ScalarType::Name::Text));
 }
 
-void TypeCheckingPass::visit(Variable& variable)
+void TypeCheckingPass::check(Variable& variable)
 {
     const auto id = boundVariable(variable);
     if( id.has_value() )
         _model.setType(variable.id(), *_symbols.variable(*id)->type);
 }
 
-void TypeCheckingPass::visit(Unary& unary)
+void TypeCheckingPass::check(Unary& unary)
 {
     const auto operandType = expressionType(*unary._operand);
     const auto scalar = requireScalar(*unary._operand);
@@ -739,7 +805,7 @@ void TypeCheckingPass::visit(Unary& unary)
     }
 }
 
-void TypeCheckingPass::visit(Binary& binary)
+void TypeCheckingPass::check(Binary& binary)
 {
     const auto leftType = expressionType(*binary._left);
     const auto rightType = expressionType(*binary._right);
@@ -835,7 +901,7 @@ void TypeCheckingPass::visit(Binary& binary)
         _model.setType(binary.id(), *type);
 }
 
-void TypeCheckingPass::visit(Apply& apply)
+void TypeCheckingPass::check(Apply& apply)
 {
     for( const auto& argument : apply._arguments )
         expressionType(*argument);
@@ -932,7 +998,7 @@ const Type* TypeCheckingPass::expressionType(Expression& expression)
     if( const auto type = _model.type(expression.id()) )
         return type;
 
-    visit(expression);
+    check(expression);
     return _model.type(expression.id());
 }
 
@@ -999,10 +1065,19 @@ SemanticAnalyzer::SemanticAnalyzer(SymbolTable& symbols, SemanticModel& model, D
 
 bool SemanticAnalyzer::analyze(Program& program)
 {
+    NameDeclarationPass declarations{_symbols, _model, _diagnostics};
+    declarations.declareGlobals(program);
+
     NameResolutionPass nameResolution{_symbols, _model, _diagnostics};
-    nameResolution.visit(program);
+    for( const auto& subroutine : program._subroutines ) {
+        _symbols.openScope();
+        declarations.declareLocals(*subroutine);
+        nameResolution.resolve(*subroutine);
+        _symbols.closeScope();
+    }
+
     TypeCheckingPass typeChecking{_symbols, _model, _diagnostics};
-    typeChecking.visit(program);
+    typeChecking.check(program);
     return _diagnostics.count() == 0;
 }
 

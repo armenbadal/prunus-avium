@@ -51,7 +51,9 @@ std::unique_ptr<llvm::Module> IRCodeGen::generate()
     _module = std::make_unique<llvm::Module>("prunus", _context);
     _module->setTargetTriple(llvm::Triple{llvm::sys::getDefaultTargetTriple()});
 
-    visit(static_cast<Node&>(_program));
+    declareSubroutines();
+    emitSubroutines();
+    emitMainWrapper();
     _builder.ClearInsertionPoint();
 
     if( llvm::verifyModule(*_module, &llvm::errs()) )
@@ -60,32 +62,38 @@ std::unique_ptr<llvm::Module> IRCodeGen::generate()
     return std::move(_module);
 }
 
-void IRCodeGen::visit(Program& program)
+void IRCodeGen::declareSubroutines()
+{
+    for( const auto& subroutine : _program._subroutines ) {
+        const auto symbol = _model.symbol(subroutine->id());
+        if( !symbol )
+            llvm::report_fatal_error("IR code generation requires a resolved subroutine");
+
+        const auto* subroutineSymbol = _symbols.subroutine(*symbol);
+        if( subroutineSymbol == nullptr )
+            llvm::report_fatal_error("IR code generation symbol is not a subroutine");
+
+        const auto functionType = createFunctionType(subroutineSymbol->signature);
+        llvm::Function::Create(functionType, llvm::Function::InternalLinkage,
+            subroutineName(subroutineSymbol->id), *_module);
+    }
+}
+
+void IRCodeGen::emitSubroutines()
+{
+    for( const auto& subroutine : _program._subroutines )
+        emit(*subroutine);
+}
+
+void IRCodeGen::emitMainWrapper()
 {
     const auto entryPoint = _model.entryPoint();
     if( !entryPoint )
         llvm::report_fatal_error("IR code generation requires a semantic entry point");
 
-    const auto* entrySymbol = _symbols.subroutine(*entryPoint);
-    if( entrySymbol == nullptr )
-        llvm::report_fatal_error("IR code generation entry point is not a subroutine");
-
-    Subroutine* entrySubroutine = nullptr;
-    for( const auto& subroutine : program._subroutines ) {
-        const auto symbol = _model.symbol(subroutine->id());
-        if( symbol && *symbol == *entryPoint ) {
-            entrySubroutine = subroutine.get();
-            break;
-        }
-    }
-    if( entrySubroutine == nullptr )
-        llvm::report_fatal_error("IR code generation cannot find the entry-point AST node");
-
-    visit(*entrySubroutine);
-
-    auto* entryFunction = _module->getFunction(subroutineName(entrySymbol->id));
+    auto* entryFunction = _module->getFunction(subroutineName(*entryPoint));
     if( entryFunction == nullptr )
-        llvm::report_fatal_error("IR code generation did not create the entry-point function");
+        llvm::report_fatal_error("IR code generation did not declare the entry-point function");
 
     const auto mainType = llvm::FunctionType::get(llvm::Type::getInt32Ty(_context), false);
     auto* main = llvm::Function::Create(mainType, llvm::Function::ExternalLinkage, "main", *_module);
@@ -95,7 +103,7 @@ void IRCodeGen::visit(Program& program)
     _builder.CreateRet(_builder.getInt32(0));
 }
 
-void IRCodeGen::visit(Subroutine& subroutine)
+void IRCodeGen::emit(Subroutine& subroutine)
 {
     const auto symbol = _model.symbol(subroutine.id());
     if( !symbol )
@@ -105,102 +113,137 @@ void IRCodeGen::visit(Subroutine& subroutine)
     if( subroutineSymbol == nullptr )
         llvm::report_fatal_error("IR code generation symbol is not a subroutine");
 
-    const auto functionType = createFunctionType(subroutineSymbol->signature);
-    auto* function = llvm::Function::Create(functionType,
-        llvm::Function::InternalLinkage, subroutineName(subroutineSymbol->id), *_module);
+    auto* function = _module->getFunction(subroutineName(subroutineSymbol->id));
+    if( function == nullptr )
+        llvm::report_fatal_error("IR code generation requires a declared function");
+
     auto* entryBlock = llvm::BasicBlock::Create(_context, "entry", function);
     _builder.SetInsertPoint(entryBlock);
-    visit(*subroutine._body);
-    _builder.CreateRetVoid();
+    emit(*subroutine._body);
+
+    if( _builder.GetInsertBlock()->getTerminator() == nullptr ) {
+        if( !function->getReturnType()->isVoidTy() )
+            llvm::report_fatal_error("IR code generation produced a function without a return value");
+        _builder.CreateRetVoid();
+    }
 }
 
-void IRCodeGen::visit(Sequence& sequence)
+void IRCodeGen::emit(Sequence& sequence)
 {
     for( const auto& statement : sequence._items )
-        visit(*statement);
+        emit(*statement);
 }
 
-void IRCodeGen::visit(Dim& node)
+void IRCodeGen::emit(Statement& statement)
+{
+    switch( statement.kind ) {
+        case NodeKind::Dim:
+            return emit(static_cast<Dim&>(statement));
+        case NodeKind::Let:
+            return emit(static_cast<Let&>(statement));
+        case NodeKind::If:
+            return emit(static_cast<If&>(statement));
+        case NodeKind::While:
+            return emit(static_cast<While&>(statement));
+        case NodeKind::For:
+            return emit(static_cast<For&>(statement));
+        case NodeKind::Call:
+            return emit(static_cast<Call&>(statement));
+        case NodeKind::Return:
+            return emit(static_cast<Return&>(statement));
+        default:
+            std::unreachable();
+    }
+}
+
+void IRCodeGen::emit(Dim& node)
 {
     unsupportedNode(node);
 }
 
-void IRCodeGen::visit(Let& node)
+void IRCodeGen::emit(Let& node)
 {
     unsupportedNode(node);
 }
 
-void IRCodeGen::visit(If& node)
+void IRCodeGen::emit(If& node)
 {
     unsupportedNode(node);
 }
 
-void IRCodeGen::visit(IfBranch& node)
+void IRCodeGen::emit(While& node)
 {
     unsupportedNode(node);
 }
 
-void IRCodeGen::visit(While& node)
+void IRCodeGen::emit(For& node)
 {
     unsupportedNode(node);
 }
 
-void IRCodeGen::visit(For& node)
+void IRCodeGen::emit(Call& node)
 {
     unsupportedNode(node);
 }
 
-void IRCodeGen::visit(Call& node)
+void IRCodeGen::emit(Return& node)
 {
     unsupportedNode(node);
 }
 
-void IRCodeGen::visit(Return& node)
+llvm::Value* IRCodeGen::emit(Expression& expression)
+{
+    switch( expression.kind ) {
+        case NodeKind::Apply:
+            return emit(static_cast<Apply&>(expression));
+        case NodeKind::Binary:
+            return emit(static_cast<Binary&>(expression));
+        case NodeKind::Unary:
+            return emit(static_cast<Unary&>(expression));
+        case NodeKind::Variable:
+            return emit(static_cast<Variable&>(expression));
+        case NodeKind::Text:
+            return emit(static_cast<Text&>(expression));
+        case NodeKind::Number:
+            return emit(static_cast<Number&>(expression));
+        case NodeKind::Boolean:
+            return emit(static_cast<Boolean&>(expression));
+        default:
+            std::unreachable();
+    }
+}
+
+llvm::Value* IRCodeGen::emit(Apply& node)
 {
     unsupportedNode(node);
 }
 
-void IRCodeGen::visit(Apply& node)
+llvm::Value* IRCodeGen::emit(Binary& node)
 {
     unsupportedNode(node);
 }
 
-void IRCodeGen::visit(ScalarType& node)
+llvm::Value* IRCodeGen::emit(Unary& node)
 {
     unsupportedNode(node);
 }
 
-void IRCodeGen::visit(ArrayType& node)
+llvm::Value* IRCodeGen::emit(Variable& node)
 {
     unsupportedNode(node);
 }
 
-void IRCodeGen::visit(Binary& node)
+llvm::Value* IRCodeGen::emit(Text& node)
 {
     unsupportedNode(node);
 }
 
-void IRCodeGen::visit(Unary& node)
+llvm::Value* IRCodeGen::emit(Number& node)
 {
     unsupportedNode(node);
 }
 
-void IRCodeGen::visit(Variable& node)
-{
-    unsupportedNode(node);
-}
-
-void IRCodeGen::visit(Text& node)
-{
-    unsupportedNode(node);
-}
-
-void IRCodeGen::visit(Number& node)
-{
-    unsupportedNode(node);
-}
-
-void IRCodeGen::visit(Boolean& node)
+llvm::Value* IRCodeGen::emit(Boolean& node)
 {
     unsupportedNode(node);
 }
