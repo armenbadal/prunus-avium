@@ -14,10 +14,12 @@ add_executable(${PROJECT_NAME}-tests
     "${PROJECT_SOURCE_DIR}/src/diagnostics.cxx"
     "${PROJECT_SOURCE_DIR}/src/ircodegen.cxx"
     "${PROJECT_SOURCE_DIR}/src/lexeme.cxx"
+    "${PROJECT_SOURCE_DIR}/src/nameanalysis.cxx"
     "${PROJECT_SOURCE_DIR}/src/parser.cxx"
     "${PROJECT_SOURCE_DIR}/src/scanner.cxx"
     "${PROJECT_SOURCE_DIR}/src/semantic.cxx"
-    "${PROJECT_SOURCE_DIR}/src/symbols.cxx")
+    "${PROJECT_SOURCE_DIR}/src/symbols.cxx"
+    "${PROJECT_SOURCE_DIR}/src/typechecking.cxx")
 target_compile_features(${PROJECT_NAME}-tests PRIVATE cxx_std_23)
 target_compile_definitions(${PROJECT_NAME}-tests PRIVATE
     AVIUM_SOURCE_DIR="${PROJECT_SOURCE_DIR}")

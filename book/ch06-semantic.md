@@ -264,9 +264,12 @@ Program AST
 է արտահայտությունների տիպերն ու ստուգում լեզվի տիպային կանոնները։ Բոլոր փուլերը
 կարող են ախտորոշումներ ավելացնել ընդհանուր `Diagnostics` օբյեկտում։
 
-Այս դասերը սահմանված են `semantic.cxx` ֆայլի անանուն անունների տիրույթում։
-Դրանք իրականացման ներքին մանրամասներ են և կոմպիլյատորի մնացած մասերին
-տեսանելի չեն։ Արտաքին ինտերֆեյսը միայն `SemanticAnalyzer` դասն է։
+Անունների երկու pass-երը սահմանված են `nameanalysis.cxx`-ում, իսկ
+`TypeCheckingPass`-ը՝ `typechecking.cxx`-ում։ Դրանք իրականացման ներքին
+մանրամասներ են և կոմպիլյատորի մնացած մասերին տեսանելի չեն։ Ներքին փուլերը
+կիսում են փոքր `SemanticContext` օբյեկտը, որը պահում է `SymbolTable`,
+`SemanticModel` և `Diagnostics` հղումները։ Արտաքին ինտերֆեյսը միայն
+`SemanticAnalyzer` դասն է։
 
 
 ## Անունների դերերի որոշումը
@@ -328,9 +331,9 @@ END SUB
 գրանցվում են պարամետրերը, ապա՝ մարմնի բոլոր լոկալ հայտարարումները։ Միայն
 դրանից հետո է սկսվում անունների օգտագործումները լուծող անցումը։
 
-`SemanticAnalyzer`-ը յուրաքանչյուր ենթածրագրի համար բացում է նոր տիրույթ,
-կանչում `NameDeclarationPass::declareLocals()`-ը, ապա նույն բաց տիրույթում՝
-`NameResolutionPass::resolve()`-ը։ Դրանից հետո տիրույթը փակվում է։
+`analyzeNames()` ներքին ֆունկցիան յուրաքանչյուր ենթածրագրի համար բացում է նոր
+տիրույթ, կանչում `NameDeclarationPass::declareLocals()`-ը, ապա նույն բաց
+տիրույթում՝ `NameResolutionPass::resolve()`-ը։ Դրանից հետո տիրույթը փակվում է։
 
 `declareLocals()` մեթոդը ռեկուրսիվ անցնում է `IF`, `WHILE` ու `FOR`
 կառուցվածքների մարմիններով և հավաքում այնտեղ հանդիպող `DIM` հայտարարումները։
@@ -398,31 +401,48 @@ END FOR
 
 ## Տիպերի ստուգումը
 
-Երբ երկրորդ անցումը սկսվում է, անունների մասին անհրաժեշտ տեղեկությունն արդեն
+Երբ անունների վերլուծությունն ավարտվում է, անհրաժեշտ տեղեկությունն արդեն
 պատրաստ է։ `TypeCheckingPass`-ը նորից անցնում է ամբողջ ծառով, բայց այլևս չի
 բացում տեսանելիության տիրույթներ և անուններ չի որոնում։ `Variable`, `Call` կամ
 `Apply` հանգույցի սիմվոլը այն վերցնում է `SemanticModel`-ից։
 
 Կեռասն ունի երեք պարզ տիպ՝ `BOOL`, `REAL` և `TEXT`, ինչպես նաև դրանց
 միաչափ զանգվածները։ Արտահայտության տիպը ստանալու ընդհանուր կետը
-`expressionType()` մեթոդն է.
+`typeOf()` մեթոդն է.
 
 ```cpp
-const Type* TypeCheckingPass::expressionType(Expression& expression)
+const Type* TypeCheckingPass::typeOf(const Expression& expression)
 {
-    if( const auto type = _model.type(expression.id()) )
+    if( const auto type = _context.model.type(expression.id()) )
         return type;
 
-    check(expression);
-    return _model.type(expression.id());
+    switch( expression.kind ) {
+        case NodeKind::Boolean:
+            return typeOf(static_cast<const Boolean&>(expression));
+        case NodeKind::Number:
+            return typeOf(static_cast<const Number&>(expression));
+        case NodeKind::Text:
+            return typeOf(static_cast<const Text&>(expression));
+        case NodeKind::Variable:
+            return typeOf(static_cast<const Variable&>(expression));
+        case NodeKind::Unary:
+            return typeOf(static_cast<const Unary&>(expression));
+        case NodeKind::Binary:
+            return typeOf(static_cast<const Binary&>(expression));
+        case NodeKind::Apply:
+            return typeOf(static_cast<const Apply&>(expression));
+        default:
+            std::unreachable();
+    }
 }
 ```
 
 Մեթոդը նախ ստուգում է՝ արդյոք տվյալ հանգույցի տիպն արդեն հաշվարկված է։ Եթե
-այո, վերադարձնում է մոդելում եղած արժեքը։ Հակառակ դեպքում այցելում է
-արտահայտության հանգույցը, հաշվարկում տիպը և նորից կարդում այն մոդելից։ Այսպես
-հաջողությամբ տիպավորված նույն արտահայտությունը երկրորդ անգամ ստուգելու կարիք
-չի լինում։
+այո, վերադարձնում է մոդելում եղած արժեքը։ Հակառակ դեպքում ընտրում է հանգույցի
+տեսակին համապատասխան overload-ը։ Հաշվարկված տիպը `remember()` օժանդակ
+մեթոդը միաժամանակ գրանցում է մոդելում և վերադարձնում։ Այսպես տիպը դառնում է
+հաշվարկի բացահայտ արդյունք, իսկ հաջողությամբ տիպավորված նույն արտահայտությունը
+երկրորդ անգամ ստուգելու կարիք չի լինում։
 
 Լիտերալների տիպերը որոշվում են անմիջապես. `Boolean`-ը `BOOL` է, `Number`-ը՝
 `REAL`, իսկ `Text`-ը՝ `TEXT`։ Փոփոխականի տիպը վերցվում է անունների լուծման փուլում
@@ -457,7 +477,7 @@ const Type* TypeCheckingPass::expressionType(Expression& expression)
 Ամբողջ զանգվածը թվաբանական, տրամաբանական կամ համեմատման գործողության օպերանդ
 լինել չի կարող։ Այդ ընդհանուր ստուգումն առանձնացված է `requireScalar()`
 մեթոդում։ Եթե արտահայտությունը զանգվածային է, մեթոդն ախտորոշում է սխալ և
-վերադարձնում `false`։
+վերադարձնում `nullptr`, իսկ հակառակ դեպքում՝ պարզ տիպը։
 
 Նկատենք նաև մեկ ուրիշ կարևոր մանրամասն։ Եթե գործողության արդյունքի տիպը
 հայտնի է, այն գրանցվում է նույնիսկ օպերանդի սխալի դեպքում։ Օրինակ, սխալ
@@ -485,33 +505,27 @@ const Type* TypeCheckingPass::expressionType(Expression& expression)
 ### Զանգվածի չափն ու ինդեքսը
 
 Լոկալ զանգվածի հայտարարումը պարտադիր պետք է չափ ունենա։ Չափը որոշող
-արտահայտությունը պետք է լինի պարզ `REAL` արժեք։ Եթե այն հաստատուն
-արտահայտություն է, ապա վերլուծիչը նաև հաշվում է դրա արժեքը և պահանջում, որ
-այն լինի վերջավոր, դրական ամբողջ թիվ։
+արտահայտությունը պետք է լինի պարզ `REAL` արժեք։ Սեմանտիկ վերլուծիչը ստուգում է
+արտահայտության տիպը, բայց չի հաշվարկում դրա արժեքը։
 
 ```cerasus
 DIM first[10] AS TEXT          ' ճիշտ է
 DIM second[2 + 3 * 4] AS REAL ' նույնպես ճիշտ է
-DIM third[-1] AS BOOL         ' սխալ է
-DIM fourth[2.5] AS REAL       ' սխալ է
+DIM third[-1] AS BOOL         ' տիպային ստուգումն անցնում է
+DIM fourth[2.5] AS REAL       ' տիպային ստուգումն անցնում է
 ```
 
-Հաստատուն արժեքը հաշվում է `constantReal()` օժանդակ ֆունկցիան։ Այն ճանաչում
-է թվային լիտերալները, ունար `+` ու `-` գործողությունները և թվաբանական
-երկտեղանի գործողությունները։ Եթե ենթաարտահայտության մեջ փոփոխական կա կամ
-հանդիպում է զրոյի վրա բաժանում, արդյունքը `std::nullopt` է։ Այս դեպքում
-վերլուծիչը չի կարող չափի արժեքը որոշել կոմպիլյացիայի պահին և արժեքային
-ստուգումը թողնում է ծրագրի կատարման փուլին։
+Չափի դրական, վերջավոր և ամբողջ լինելը արժեքային կանոն է։ Այն պետք է ստուգվի
+ծրագրի կատարման փուլում անկախ նրանից՝ արտահայտությունը գրված է լիտերալներով,
+թե կախված է փոփոխականներից։
 
 Զանգվածի ինդեքսը նույնպես պետք է լինի պարզ `REAL`։ Ինդեքսավորման պահին
 ստուգվում է նաև, որ ձախ կողմի արտահայտությունն իսկապես զանգված լինի։ Եթե այդ
 երկու պայմանը կատարված են, `a[i]` արտահայտության տիպը դառնում է `a` զանգվածի
 տարրի տիպը։
 
-Սակայն ոչ բոլոր ստուգումներն է հնարավոր կատարել կոմպիլյացիայի պահին։
-Դինամիկ հաշվարկված չափի դրական ու ամբողջ լինելը, ինդեքսի ամբողջ արժեք ունենալը
-և զանգվածի սահմաններում գտնվելը կախված են կատարման ժամանակի արժեքներից։ Դրանք
-պետք է ստուգվեն հաջորդ՝ ծրագրի կատարման փուլում։
+Չափի դրական ու ամբողջ լինելը, ինդեքսի ամբողջ արժեք ունենալը և զանգվածի
+սահմաններում գտնվելը ստուգվում են ծրագրի կատարման փուլում։
 
 
 ### Ղեկավարող կառուցվածքները
@@ -615,8 +629,8 @@ const auto& boolean = scalarType(ScalarType::Name::Bool);
 ## Սխալների կուտակումը
 
 Ինչպես շարահյուսական վերլուծիչը, իմաստային վերլուծիչն էլ առաջին սխալի վրա չի
-կանգնում։ Անցումների `report()` մեթոդները հաղորդագրությունն ու հանգույցի
-տողի համարը փոխանցում են ընդհանուր `Diagnostics` օբյեկտին, ապա ծառի անցումը
+կանգնում։ `SemanticContext::report()` մեթոդը հաղորդագրությունն ու հանգույցի
+տողի համարը փոխանցում է ընդհանուր `Diagnostics` օբյեկտին, ապա ծառի անցումը
 շարունակվում է այնքանով, որքանով առկա տվյալները վստահելի են։
 
 Օրինակ, եթե կանչվող ենթածրագիրը չի գտնվել, ապա նրա ստորագրությունն այլևս
@@ -635,22 +649,12 @@ const auto& boolean = scalarType(ScalarType::Name::Bool);
 վերադարձնում է `true`, եթե ոչ մի ախտորոշում չի գրանցվել.
 
 ```cpp
-bool SemanticAnalyzer::analyze(Program& program)
+bool SemanticAnalyzer::analyze(const Program& program)
 {
-    NameDeclarationPass declarations{_symbols, _model, _diagnostics};
-    declarations.declareGlobals(program);
-
-    NameResolutionPass nameResolution{_symbols, _model, _diagnostics};
-    for( const auto& subroutine : program._subroutines ) {
-        _symbols.openScope();
-        declarations.declareLocals(*subroutine);
-        nameResolution.resolve(*subroutine);
-        _symbols.closeScope();
-    }
-
-    TypeCheckingPass typeChecking{_symbols, _model, _diagnostics};
-    typeChecking.check(program);
-
+    SemanticContext context{
+        _symbols, _model, _diagnostics};
+    analyzeNames(program, context);
+    checkTypes(program, context);
     return _diagnostics.count() == 0;
 }
 ```

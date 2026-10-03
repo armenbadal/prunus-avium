@@ -30,7 +30,7 @@ class SemanticAnalyzer {
 public:
     SemanticAnalyzer(SymbolTable& symbols, SemanticModel& model, Diagnostics& diagnostics);
 
-    bool analyze(Program& program);
+    bool analyze(const Program& program);
 
 private:
     SymbolTable& _symbols;

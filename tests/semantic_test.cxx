@@ -738,7 +738,7 @@ TEST_CASE("Semantic analyzer requires a scalar REAL array size", "[semantic]")
     }
 }
 
-TEST_CASE("Semantic analyzer validates constant array sizes", "[semantic]")
+TEST_CASE("Semantic analyzer does not evaluate constant array sizes", "[semantic]")
 {
     for( const auto kind : {0, 1, 2} ) {
         Expression::Ptr size;
@@ -754,8 +754,8 @@ TEST_CASE("Semantic analyzer validates constant array sizes", "[semantic]")
         auto array = test::arrayDeclaration(
             "items", std::move(size), ScalarType::Name::Real, 1);
         const auto result = analyze({subroutineWithBody("Main", {std::move(array)})});
-        CHECK_FALSE(result.valid);
-        CHECK(result.errors.size() == 1);
+        CHECK(result.valid);
+        CHECK(result.errors.empty());
     }
 }
 

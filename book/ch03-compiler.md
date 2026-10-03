@@ -448,7 +448,10 @@ prunus-avium/
 │   ├── ast.hxx
 │   ├── astlisp.hxx, astlisp.cxx
 │   ├── symbols.hxx, symbols.cxx
-│   └── semantic.hxx, semantic.cxx
+│   ├── semantic.hxx, semantic.cxx
+│   ├── semanticpasses.hxx
+│   ├── nameanalysis.cxx
+│   └── typechecking.cxx
 ├── runtime/
 │   ├── CMakeLists.txt
 │   ├── include/

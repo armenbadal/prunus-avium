@@ -19,6 +19,8 @@ add_executable(${PROJECT_NAME}
     src/parser.cxx
     src/symbols.cxx
     src/semantic.cxx
+    src/nameanalysis.cxx
+    src/typechecking.cxx
     src/astlisp.cxx
     src/ircodegen.cxx
     src/runtimeabi.cxx)
