@@ -1,62 +1,15 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "ast.hxx"
-#include "astvisitor.hxx"
 #include "test_ast.hxx"
 
 #include <string>
-#include <type_traits>
 #include <vector>
 
 namespace {
 
 using namespace avium;
 using test::NodeList;
-
-class NodeKindVisitor final : public ASTVisitor<NodeKindVisitor, NodeKind> {
-public:
-    using ASTVisitor<NodeKindVisitor, NodeKind>::visit;
-
-    NodeKind visit(Program&) { return NodeKind::Program; }
-
-    NodeKind visit(Subroutine&) { return NodeKind::Subroutine; }
-
-    NodeKind visit(Sequence&) { return NodeKind::Sequence; }
-
-    NodeKind visit(Dim&) { return NodeKind::Dim; }
-
-    NodeKind visit(Let&) { return NodeKind::Let; }
-
-    NodeKind visit(If&) { return NodeKind::If; }
-
-    NodeKind visit(IfBranch&) { return NodeKind::IfBranch; }
-
-    NodeKind visit(While&) { return NodeKind::While; }
-
-    NodeKind visit(For&) { return NodeKind::For; }
-
-    NodeKind visit(Call&) { return NodeKind::Call; }
-
-    NodeKind visit(ScalarType&) { return NodeKind::ScalarType; }
-
-    NodeKind visit(ArrayType&) { return NodeKind::ArrayType; }
-
-    NodeKind visit(Return&) { return NodeKind::Return; }
-
-    NodeKind visit(Apply&) { return NodeKind::Apply; }
-
-    NodeKind visit(Binary&) { return NodeKind::Binary; }
-
-    NodeKind visit(Unary&) { return NodeKind::Unary; }
-
-    NodeKind visit(Variable&) { return NodeKind::Variable; }
-
-    NodeKind visit(Text&) { return NodeKind::Text; }
-
-    NodeKind visit(Number&) { return NodeKind::Number; }
-
-    NodeKind visit(Boolean&) { return NodeKind::Boolean; }
-};
 
 Sequence::Ptr emptySequence(Position line = 1)
 {
@@ -295,41 +248,4 @@ TEST_CASE("CALL, RETURN, ենթածրագիրը և ծրագիրը պահպանո
     REQUIRE(program->_subroutines.size() == 2);
     CHECK(program->_subroutines.front().get() == procedureNode);
     CHECK(program->_subroutines.back().get() == functionNode);
-}
-
-TEST_CASE("ASTVisitor-ը NodeKind-ով ուղարկում է ճիշտ overload-ին", "[ast][visitor]")
-{
-    auto number = node<Number>(1.0, 40);
-    auto* numberNode = number.get();
-    auto variable = node<Variable>("x", 40);
-    auto* variableNode = variable.get();
-    auto let = node<Let>(std::move(variable), nullptr, std::move(number), 40);
-    auto* letNode = let.get();
-    auto returnStatement = node<Return>(node<Number>(0.0, 40), 40);
-    auto* returnNode = returnStatement.get();
-    auto sequence = node<Sequence>(
-        NodeList<Statement>{std::move(let), std::move(returnStatement)}, 40);
-    auto* sequenceNode = sequence.get();
-    auto subroutine = node<Subroutine>(
-        "Main", NodeList<Parameter>{}, nullptr, std::move(sequence), 40);
-    auto* subroutineNode = subroutine.get();
-    const auto program = node<Program>(NodeList<Subroutine>{std::move(subroutine)}, 40);
-    auto scalar = node<ScalarType>(ScalarType::Name::Real, 40);
-    Node& scalarNode = *scalar;
-    auto array = node<ArrayType>(
-        node<ScalarType>(ScalarType::Name::Text, 40), nullptr, 40);
-    Node& arrayNode = *array;
-    Node empty;
-    NodeKindVisitor visitor;
-
-    CHECK(visitor.visit(*numberNode) == NodeKind::Number);
-    CHECK(visitor.visit(*variableNode) == NodeKind::Variable);
-    CHECK(visitor.visit(*letNode) == NodeKind::Let);
-    CHECK(visitor.visit(*returnNode) == NodeKind::Return);
-    CHECK(visitor.visit(*sequenceNode) == NodeKind::Sequence);
-    CHECK(visitor.visit(*subroutineNode) == NodeKind::Subroutine);
-    CHECK(visitor.visit(*program) == NodeKind::Program);
-    CHECK(visitor.visit(scalarNode) == NodeKind::ScalarType);
-    CHECK(visitor.visit(arrayNode) == NodeKind::ArrayType);
-    CHECK(visitor.visit(empty) == NodeKind::Empty);
 }

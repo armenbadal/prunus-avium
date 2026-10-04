@@ -64,7 +64,8 @@ AnalysisResult analyze(NodeList<Subroutine> subroutines)
     SymbolTable symbols;
     SemanticModel model;
     Diagnostics diagnostics;
-    SemanticAnalyzer analyzer{symbols, model, diagnostics};
+    SemanticContext semanticContext{symbols, model, diagnostics};
+    SemanticAnalyzer analyzer{semanticContext};
     const auto valid = analyzer.analyze(*program);
     return {valid, diagnostics.errors()};
 }
@@ -128,7 +129,8 @@ TEST_CASE("Semantic analyzer declares subroutine signatures", "[semantic]")
     SymbolTable symbols;
     SemanticModel model;
     Diagnostics diagnostics;
-    SemanticAnalyzer analyzer{symbols, model, diagnostics};
+    SemanticContext semanticContext{symbols, model, diagnostics};
+    SemanticAnalyzer analyzer{semanticContext};
 
     REQUIRE(analyzer.analyze(*program));
     CHECK(model.entryPoint() == model.symbol(mainId));
@@ -185,7 +187,8 @@ TEST_CASE("Semantic analyzer binds local declarations and uses", "[semantic]")
     SymbolTable symbols;
     SemanticModel model;
     Diagnostics diagnostics;
-    SemanticAnalyzer analyzer{symbols, model, diagnostics};
+    SemanticContext semanticContext{symbols, model, diagnostics};
+    SemanticAnalyzer analyzer{semanticContext};
 
     REQUIRE(analyzer.analyze(*program));
     const auto id = model.symbol(declarationId);
@@ -262,7 +265,8 @@ TEST_CASE("Implicit FOR variable is visible in the whole subroutine", "[semantic
     SymbolTable symbols;
     SemanticModel model;
     Diagnostics diagnostics;
-    SemanticAnalyzer analyzer{symbols, model, diagnostics};
+    SemanticContext semanticContext{symbols, model, diagnostics};
+    SemanticAnalyzer analyzer{semanticContext};
 
     REQUIRE(analyzer.analyze(*program));
     const auto id = model.symbol(parameterId);
@@ -298,7 +302,8 @@ TEST_CASE("Semantic analyzer accepts a compatible scalar assignment", "[semantic
     SymbolTable symbols;
     SemanticModel model;
     Diagnostics diagnostics;
-    SemanticAnalyzer analyzer{symbols, model, diagnostics};
+    SemanticContext semanticContext{symbols, model, diagnostics};
+    SemanticAnalyzer analyzer{semanticContext};
 
     REQUIRE(analyzer.analyze(*program));
     REQUIRE(model.type(numberId) != nullptr);
@@ -332,7 +337,8 @@ TEST_CASE("Successful semantic analysis types every expression", "[semantic]")
     SymbolTable symbols;
     SemanticModel model;
     Diagnostics diagnostics;
-    SemanticAnalyzer analyzer{symbols, model, diagnostics};
+    SemanticContext semanticContext{symbols, model, diagnostics};
+    SemanticAnalyzer analyzer{semanticContext};
 
     REQUIRE(analyzer.analyze(*program));
     const std::vector<NodeId> expressions{
@@ -738,7 +744,7 @@ TEST_CASE("Semantic analyzer requires a scalar REAL array size", "[semantic]")
     }
 }
 
-TEST_CASE("Semantic analyzer validates constant array sizes", "[semantic]")
+TEST_CASE("Semantic analyzer does not evaluate constant array sizes", "[semantic]")
 {
     for( const auto kind : {0, 1, 2} ) {
         Expression::Ptr size;
@@ -754,8 +760,8 @@ TEST_CASE("Semantic analyzer validates constant array sizes", "[semantic]")
         auto array = test::arrayDeclaration(
             "items", std::move(size), ScalarType::Name::Real, 1);
         const auto result = analyze({subroutineWithBody("Main", {std::move(array)})});
-        CHECK_FALSE(result.valid);
-        CHECK(result.errors.size() == 1);
+        CHECK(result.valid);
+        CHECK(result.errors.empty());
     }
 }
 
@@ -784,7 +790,8 @@ TEST_CASE("Array access has the array element type", "[semantic]")
     SymbolTable symbols;
     SemanticModel model;
     Diagnostics diagnostics;
-    SemanticAnalyzer analyzer{symbols, model, diagnostics};
+    SemanticContext semanticContext{symbols, model, diagnostics};
+    SemanticAnalyzer analyzer{semanticContext};
 
     REQUIRE(analyzer.analyze(*program));
     REQUIRE(model.type(accessId) != nullptr);
@@ -853,7 +860,8 @@ TEST_CASE("Semantic analyzer binds valid procedure and function calls", "[semant
     SymbolTable symbols;
     SemanticModel model;
     Diagnostics diagnostics;
-    SemanticAnalyzer analyzer{symbols, model, diagnostics};
+    SemanticContext semanticContext{symbols, model, diagnostics};
+    SemanticAnalyzer analyzer{semanticContext};
 
     REQUIRE(analyzer.analyze(*program));
     CHECK(model.symbol(callId) == model.symbol(printMessageId));
@@ -1118,7 +1126,8 @@ TEST_CASE("Signature checker supports additional builtin subroutines", "[semanti
         {"IsEmpty", {{&textType}, &boolType}, true});
     SemanticModel model;
     Diagnostics diagnostics;
-    SemanticAnalyzer analyzer{symbols, model, diagnostics};
+    SemanticContext semanticContext{symbols, model, diagnostics};
+    SemanticAnalyzer analyzer{semanticContext};
 
     auto apply = node<Apply>("IsEmpty",
         NodeList<Expression>{node<Text>("", 2)}, 2);

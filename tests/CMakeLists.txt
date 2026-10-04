@@ -7,6 +7,8 @@ add_executable(${PROJECT_NAME}-tests
     ircodegen_test.cxx
     lexeme_test.cxx
     parser_test.cxx
+    runtime_abi_probe.c
+    runtimeabi_test.cxx
     scanner_test.cxx
     semantic_test.cxx
     symbols_test.cxx
@@ -14,22 +16,25 @@ add_executable(${PROJECT_NAME}-tests
     "${PROJECT_SOURCE_DIR}/src/diagnostics.cxx"
     "${PROJECT_SOURCE_DIR}/src/ircodegen.cxx"
     "${PROJECT_SOURCE_DIR}/src/lexeme.cxx"
+    "${PROJECT_SOURCE_DIR}/src/nameanalysis.cxx"
     "${PROJECT_SOURCE_DIR}/src/parser.cxx"
+    "${PROJECT_SOURCE_DIR}/src/runtimeabi.cxx"
     "${PROJECT_SOURCE_DIR}/src/scanner.cxx"
     "${PROJECT_SOURCE_DIR}/src/semantic.cxx"
-    "${PROJECT_SOURCE_DIR}/src/symbols.cxx")
+    "${PROJECT_SOURCE_DIR}/src/symbols.cxx"
+    "${PROJECT_SOURCE_DIR}/src/typechecking.cxx")
 target_compile_features(${PROJECT_NAME}-tests PRIVATE cxx_std_23)
 target_compile_definitions(${PROJECT_NAME}-tests PRIVATE
     AVIUM_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 target_include_directories(${PROJECT_NAME}-tests PRIVATE
-    "${PROJECT_SOURCE_DIR}/src")
+    "${PROJECT_SOURCE_DIR}/src"
+    "${PROJECT_SOURCE_DIR}/runtime/include")
 target_include_directories(${PROJECT_NAME}-tests SYSTEM PRIVATE
     "${LLVM_INCLUDE_DIRS}")
 target_compile_options(${PROJECT_NAME}-tests PRIVATE
     ${AVIUM_LLVM_DEFINITIONS})
 target_link_libraries(${PROJECT_NAME}-tests PRIVATE
     Catch2::Catch2WithMain
-    LLVMCore
-    LLVMSupport)
+    ${AVIUM_LLVM_LIBRARIES})
 
 add_test(NAME ${PROJECT_NAME}.tests COMMAND ${PROJECT_NAME}-tests)

@@ -12,12 +12,8 @@
 #include <llvm/IR/Verifier.h>
 #include <llvm/TargetParser/Host.h>
 
-#include <concepts>
-
 using namespace avium;
 using test::NodeList;
-
-static_assert(std::derived_from<IRCodeGen, ASTVisitor<IRCodeGen>>);
 
 TEST_CASE("IR code generator emits an empty Main and a C entry point", "[ircodegen]")
 {
@@ -27,15 +23,22 @@ TEST_CASE("IR code generator emits an empty Main and a C entry point", "[ircodeg
     SymbolTable symbols;
     SemanticModel model;
     Diagnostics diagnostics;
-    SemanticAnalyzer analyzer{symbols, model, diagnostics};
+    SemanticContext semanticContext{symbols, model, diagnostics};
+    SemanticAnalyzer analyzer{semanticContext};
     REQUIRE(analyzer.analyze(*program));
 
     llvm::LLVMContext context;
-    auto module = IRCodeGen{context, *program, symbols, model}.generate();
+    auto generated = IRCodeGen{context, *program, symbols, model}.generate();
+    REQUIRE(generated);
+    auto module = std::move(*generated);
 
     REQUIRE(module != nullptr);
     CHECK(module->getTargetTriple().str() == llvm::sys::getDefaultTargetTriple());
+    CHECK_FALSE(module->getDataLayout().isDefault());
     CHECK_FALSE(llvm::verifyModule(*module));
+    CHECK(module->getFunction("avium_text_create") != nullptr);
+    CHECK(module->getFunction("avium_array_create") != nullptr);
+    CHECK(module->getFunction("avium_sqr") != nullptr);
 
     auto* cMain = module->getFunction("main");
     REQUIRE(cMain != nullptr);
@@ -64,4 +67,58 @@ TEST_CASE("IR code generator emits an empty Main and a C entry point", "[ircodeg
     CHECK(entryFunction->getName() == "avium.subroutine." + std::to_string(*entryPoint));
     REQUIRE(entryFunction->size() == 1);
     CHECK(llvm::isa<llvm::ReturnInst>(entryFunction->getEntryBlock().getTerminator()));
+}
+
+TEST_CASE("IR code generator declares and emits every subroutine before the C entry point", "[ircodegen]")
+{
+    auto helper = node<Subroutine>("Helper", NodeList<Parameter>{}, nullptr,
+        node<Sequence>(NodeList<Statement>{}, 1), 1);
+    const auto helperId = helper->id();
+    auto main = node<Subroutine>("Main", NodeList<Parameter>{}, nullptr,
+        node<Sequence>(NodeList<Statement>{}, 2), 2);
+    auto program = node<Program>(
+        NodeList<Subroutine>{std::move(helper), std::move(main)}, 1);
+    SymbolTable symbols;
+    SemanticModel model;
+    Diagnostics diagnostics;
+    SemanticContext semanticContext{symbols, model, diagnostics};
+    SemanticAnalyzer analyzer{semanticContext};
+    REQUIRE(analyzer.analyze(*program));
+
+    const auto helperSymbol = model.symbol(helperId);
+    REQUIRE(helperSymbol.has_value());
+
+    llvm::LLVMContext context;
+    auto generated = IRCodeGen{context, *program, symbols, model}.generate();
+    REQUIRE(generated);
+    auto module = std::move(*generated);
+
+    REQUIRE(module != nullptr);
+    CHECK_FALSE(llvm::verifyModule(*module));
+    const auto* function = module->getFunction(
+        "avium.subroutine." + std::to_string(*helperSymbol));
+    REQUIRE(function != nullptr);
+    REQUIRE(function->size() == 1);
+    CHECK(llvm::isa<llvm::ReturnInst>(function->getEntryBlock().getTerminator()));
+}
+
+TEST_CASE("IR code generator returns an error for an unsupported AST node", "[ircodegen]")
+{
+    auto declaration = node<Dim>("Value", node<ScalarType>(ScalarType::Name::Real, 4), 4);
+    auto main = node<Subroutine>("Main", NodeList<Parameter>{}, nullptr,
+        node<Sequence>(NodeList<Statement>{std::move(declaration)}, 1), 1);
+    auto program = node<Program>(NodeList<Subroutine>{std::move(main)}, 1);
+    SymbolTable symbols;
+    SemanticModel model;
+    Diagnostics diagnostics;
+    SemanticContext semanticContext{symbols, model, diagnostics};
+    SemanticAnalyzer analyzer{semanticContext};
+    REQUIRE(analyzer.analyze(*program));
+
+    llvm::LLVMContext context;
+    auto result = IRCodeGen{context, *program, symbols, model}.generate();
+
+    REQUIRE_FALSE(result);
+    CHECK(std::get<0>(result.error()) == 4);
+    CHECK(std::get<1>(result.error()) == "IR code generation does not support this AST node");
 }

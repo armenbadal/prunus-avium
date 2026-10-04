@@ -446,10 +446,12 @@ prunus-avium/
 │   ├── parser.hxx, parser.cxx
 │   ├── diagnostics.hxx, diagnostics.cxx
 │   ├── ast.hxx
-│   ├── astvisitor.hxx
 │   ├── astlisp.hxx, astlisp.cxx
 │   ├── symbols.hxx, symbols.cxx
-│   └── semantic.hxx, semantic.cxx
+│   ├── semantic.hxx, semantic.cxx
+│   ├── semanticpasses.hxx
+│   ├── nameanalysis.cxx
+│   └── typechecking.cxx
 ├── runtime/
 │   ├── CMakeLists.txt
 │   ├── include/

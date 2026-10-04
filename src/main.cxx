@@ -55,7 +55,8 @@ int main(int argc, char* argv[])
 
     avium::SymbolTable symbols;
     avium::SemanticModel model;
-    avium::SemanticAnalyzer analyzer{symbols, model, diagnostics};
+    avium::SemanticContext semanticContext{symbols, model, diagnostics};
+    avium::SemanticAnalyzer analyzer{semanticContext};
     if( !analyzer.analyze(*program) ) {
         printDiagnostics(source, diagnostics);
         return EXIT_FAILURE;
@@ -64,7 +65,12 @@ int main(int argc, char* argv[])
     llvm::LLVMContext context;
     avium::IRCodeGen codeGenerator{context, *program, symbols, model};
     auto module = codeGenerator.generate();
-    module->print(llvm::outs(), nullptr);
+    if( !module ) {
+        const auto& [line, message] = module.error();
+        std::cerr << source.string() << ':' << line << ": " << message << '\n';
+        return EXIT_FAILURE;
+    }
+    (*module)->print(llvm::outs(), nullptr);
 
     return EXIT_SUCCESS;
 }
