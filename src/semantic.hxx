@@ -17,9 +17,9 @@ public:
     void setEntryPoint(SymbolId symbol);
     void setType(NodeId node, const Type& type);
 
-    std::optional<SymbolId> symbol(NodeId node) const;
-    std::optional<SymbolId> entryPoint() const;
-    const Type* type(NodeId node) const;
+    [[nodiscard]] std::optional<SymbolId> symbol(NodeId node) const;
+    [[nodiscard]] std::optional<SymbolId> entryPoint() const;
+    [[nodiscard]] const Type* type(NodeId node) const;
 
 private:
     std::unordered_map<NodeId, SymbolId> _symbols;
@@ -32,7 +32,7 @@ struct SemanticContext {
     SemanticModel& model;
     Diagnostics& diagnostics;
 
-    void report(const Node& node, std::string_view message)
+    void report(const Node& node, std::string_view message) const
     {
         diagnostics.advance();
         diagnostics.mark(node.line, message);
