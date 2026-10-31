@@ -74,21 +74,21 @@ public:
     SymbolId declareVariable(std::string name, const Type& type, VariableStorage storage = VariableStorage::Local);
     SymbolId declareSubroutine(SubroutineSymbol symbol);
 
-    std::optional<SymbolId> lookup(std::string_view name) const;
-    std::optional<SymbolId> lookupSubroutine(std::string_view name) const;
-    bool declaredInCurrentScope(std::string_view name) const;
+    [[nodiscard]] std::optional<SymbolId> lookup(std::string_view name) const;
+    [[nodiscard]] std::optional<SymbolId> lookupSubroutine(std::string_view name) const;
+    [[nodiscard]] bool declaredInCurrentScope(std::string_view name) const;
 
-    const Symbol& symbol(SymbolId id) const;
-    const VariableSymbol* variable(SymbolId id) const;
-    const SubroutineSymbol* subroutine(SymbolId id) const;
-    std::size_t size() const noexcept;
+    [[nodiscard]] const Symbol& symbol(SymbolId id) const;
+    [[nodiscard]] const VariableSymbol* variable(SymbolId id) const;
+    [[nodiscard]] const SubroutineSymbol* subroutine(SymbolId id) const;
+    [[nodiscard]] std::size_t size() const noexcept;
 
 private:
     // անունների տիրույթը որպես արտապատկերում
     using Scope = std::unordered_map<std::string, SymbolId>;
 
     SymbolId insert(SymbolValue symbol, Scope& scope);
-    const SymbolValue& symbolValue(SymbolId id) const;
+    [[nodiscard]] const SymbolValue& symbolValue(SymbolId id) const;
 
     std::vector<SymbolValue> _symbols;
     std::vector<Scope> _scopes;

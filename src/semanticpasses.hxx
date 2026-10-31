@@ -11,6 +11,7 @@ inline const ScalarType& scalarType(ScalarType::Name name)
     static const ScalarType boolType{ScalarType::Name::Bool, 0};
     static const ScalarType realType{ScalarType::Name::Real, 0};
     static const ScalarType textType{ScalarType::Name::Text, 0};
+
     switch( name ) {
         case ScalarType::Name::Bool:
             return boolType;
@@ -19,6 +20,7 @@ inline const ScalarType& scalarType(ScalarType::Name name)
         case ScalarType::Name::Text:
             return textType;
     }
+
     std::unreachable();
 }
 

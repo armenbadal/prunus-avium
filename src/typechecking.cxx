@@ -45,10 +45,10 @@ private:
     const Type* typeOf(const Expression& expression);
     const Type* typeOf(const Boolean& boolean);
     const Type* typeOf(const Number& number);
-    const Type* typeOf(const Text& node);
-    const Type* typeOf(const Variable& node);
-    const Type* typeOf(const Unary& node);
-    const Type* typeOf(const Binary& node);
+    const Type* typeOf(const Text& text);
+    const Type* typeOf(const Variable& variable);
+    const Type* typeOf(const Unary& unary);
+    const Type* typeOf(const Binary& binary);
     const Type* typeOf(const Apply& apply);
     const Type* cacheType(const Expression& expression, const Type& type);
 
