@@ -32,9 +32,7 @@ struct RuntimeAbi {
     llvm::Function* textArrayAt;
     llvm::Function* realArrayAt;
     llvm::Function* boolArrayAt;
-    llvm::Function* printBool;
-    llvm::Function* printReal;
-    llvm::Function* printText;
+    llvm::Function* print;
     llvm::Function* input;
     llvm::Function* sqr;
 };

@@ -33,23 +33,23 @@ private:
     void check(const Subroutine& subroutine);
     void check(const Sequence& sequence);
     void check(const Statement& statement);
-    void check(const Dim& node);
-    void check(const Let& node);
-    void check(const If& node);
-    void check(const IfBranch& node);
-    void check(const While& node);
-    void check(const For& node);
-    void check(const Call& node);
-    void check(const Return& node);
+    void check(const Dim& dim);
+    void check(const Let& let);
+    void check(const If& conditional);
+    void check(const IfBranch& branch);
+    void check(const While& loop);
+    void check(const For& loop);
+    void check(const Call& call);
+    void check(const Return& statement);
 
     const Type* typeOf(const Expression& expression);
-    const Type* typeOf(const Boolean& node);
-    const Type* typeOf(const Number& node);
+    const Type* typeOf(const Boolean& boolean);
+    const Type* typeOf(const Number& number);
     const Type* typeOf(const Text& node);
     const Type* typeOf(const Variable& node);
     const Type* typeOf(const Unary& node);
     const Type* typeOf(const Binary& node);
-    const Type* typeOf(const Apply& node);
+    const Type* typeOf(const Apply& apply);
     const Type* cacheType(const Expression& expression, const Type& type);
 
     const Type& typeOfArithmetic(const Binary& binary);

@@ -26,7 +26,7 @@ void avium_print_real(double value, unsigned line)
     finish_output(line);
 }
 
-void avium_print_text(const avium_text* value, unsigned line)
+void avium_print(const avium_text* value, unsigned line)
 {
     if( value == NULL )
         avium_runtime_error(line, "Արտածվող տեքստի հասցեն դատարկ է։");
