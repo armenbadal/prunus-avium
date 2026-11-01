@@ -24,7 +24,7 @@ static void verify_signatures(void)
     void (*const str_bool)(avium_text*, bool, unsigned) = avium_str_bool;
     double (*const num)(const avium_text*, unsigned) = avium_num;
     double (*const text_length)(const avium_text*) = avium_text_length;
-    void (*const print_text)(const avium_text*, unsigned) = avium_print_text;
+    void (*const print)(const avium_text*, unsigned) = avium_print;
     void (*const input)(avium_text*, unsigned) = avium_input;
 
     (void)create;
@@ -37,7 +37,7 @@ static void verify_signatures(void)
     (void)str_bool;
     (void)num;
     (void)text_length;
-    (void)print_text;
+    (void)print;
     (void)input;
 }
 

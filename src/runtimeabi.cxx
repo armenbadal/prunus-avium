@@ -58,14 +58,11 @@ RuntimeAbi::RuntimeAbi(llvm::Module& module)
     textArrayAt = declareFunction(module, "avium_text_array_at", pointerType, {pointerType, realType, unsignedType});
     realArrayAt = declareFunction(module, "avium_real_array_at", pointerType, {pointerType, realType, unsignedType});
     boolArrayAt = declareFunction(module, "avium_bool_array_at", pointerType, {pointerType, realType, unsignedType});
-    printBool = declareFunction(module, "avium_print_bool", voidType, {boolType, unsignedType});
-    printReal = declareFunction(module, "avium_print_real", voidType, {realType, unsignedType});
-    printText = declareFunction(module, "avium_print_text", voidType, {pointerType, unsignedType});
+    print = declareFunction(module, "avium_print", voidType, {pointerType, unsignedType});
     input = declareFunction(module, "avium_input", voidType, {pointerType, unsignedType});
     sqr = declareFunction(module, "avium_sqr", realType, {realType, unsignedType});
 
     strBool->addParamAttr(1, llvm::Attribute::ZExt);
-    printBool->addParamAttr(0, llvm::Attribute::ZExt);
 }
 
 } // namespace avium

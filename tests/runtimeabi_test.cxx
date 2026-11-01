@@ -100,7 +100,7 @@ TEST_CASE("Runtime ABI text layout matches the C ABI", "[runtimeabi]")
     CHECK(avium_test_bool_size() == 1);
 }
 
-TEST_CASE("Runtime ABI declares every C entry point", "[runtimeabi]")
+TEST_CASE("Runtime ABI declares every required C entry point", "[runtimeabi]")
 {
     llvm::LLVMContext context;
     auto module = hostModule(context);
@@ -129,12 +129,9 @@ TEST_CASE("Runtime ABI declares every C entry point", "[runtimeabi]")
     checkFunction(runtime.textArrayAt, "avium_text_array_at", pointerType, {pointerType, realType, unsignedType});
     checkFunction(runtime.realArrayAt, "avium_real_array_at", pointerType, {pointerType, realType, unsignedType});
     checkFunction(runtime.boolArrayAt, "avium_bool_array_at", pointerType, {pointerType, realType, unsignedType});
-    checkFunction(runtime.printBool, "avium_print_bool", voidType, {boolType, unsignedType});
-    checkFunction(runtime.printReal, "avium_print_real", voidType, {realType, unsignedType});
-    checkFunction(runtime.printText, "avium_print_text", voidType, {pointerType, unsignedType});
+    checkFunction(runtime.print, "avium_print", voidType, {pointerType, unsignedType});
     checkFunction(runtime.input, "avium_input", voidType, {pointerType, unsignedType});
     checkFunction(runtime.sqr, "avium_sqr", realType, {realType, unsignedType});
 
     CHECK(runtime.strBool->hasParamAttribute(1, llvm::Attribute::ZExt));
-    CHECK(runtime.printBool->hasParamAttribute(0, llvm::Attribute::ZExt));
 }
