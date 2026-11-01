@@ -2,6 +2,7 @@
 
 #include "ast.hxx"
 #include "diagnostics.hxx"
+#include "runtimeabi.hxx"
 
 #include <llvm/IR/IRBuilder.h>
 
@@ -31,6 +32,7 @@ public:
     std::expected<std::unique_ptr<llvm::Module>, Error> generate();
 
 private:
+    std::expected<void, Error> configureTarget();
     void declareSubroutines();
     std::expected<void, Error> emitSubroutines();
     std::expected<void, Error> emitMainWrapper();
@@ -66,6 +68,7 @@ private:
     const SemanticModel& _model;
 
     std::unique_ptr<llvm::Module> _module;
+    std::unique_ptr<RuntimeAbi> _runtime;
 };
 
 } // namespace avium

@@ -48,6 +48,13 @@ Frontend-ը և runtime-ը պատրաստ են backend-ի հետ ինտեգրմա
 - Module-ը ստանում է host target triple և վերջում անցնում է
   `llvm::verifyModule()`։ Verification-ի ձախողումը նույնպես վերադարձվում է որպես
   `Error`։
+- Host `TargetMachine`-ից ստացվում և module-ում պահպանվում է target-ի ճիշտ
+  `DataLayout`-ը։
+- `RuntimeAbi`-ն սահմանում է `%avium.text` storage type-ը և
+  `runtime/include/*.h`-ի բոլոր C function declaration-ները։ `size_t`-ի LLVM
+  տիպը վերցվում է `DataLayout`-ից։
+- C/LLVM ABI integration test-ը համեմատում է `avium_text`-ի դաշտերի offset-ները,
+  չափն ու alignment-ը։
 - Բոլոր user subroutine-ները նախապես հայտարարվում են
   `avium.subroutine.<SymbolId>` անունով, ապա գեներացվում են մարմինները։ Այդ
   հերթականությունն արդեն հիմք է forward և recursive կանչերի համար։
@@ -62,9 +69,9 @@ Frontend-ը և runtime-ը պատրաստ են backend-ի հետ ինտեգրմա
 - Հաջող pipeline-ի դեպքում CLI-ն LLVM IR-ը տպում է `stdout`, իսկ codegen-ի սխալի
   դեպքում հաղորդագրությունը՝ `stderr` և ավարտվում է `EXIT_FAILURE`-ով։
 
-Դեռ իրականացված չեն `RuntimeAbi`-ն, target data layout-ը, փոփոխականների storage-ը,
-արտահայտությունները, statement-ների իրական lowering-ը և cleanup-ը։
-`book/ch07-llvm-ir.md`-ը նույնպես դեռ պետք է լրացվի implementation-ին զուգահեռ։
+Դեռ իրականացված չեն փոփոխականների storage-ը, արտահայտությունները,
+statement-ների իրական lowering-ը և cleanup-ը։ `book/ch07-llvm-ir.md`-ը լրացվում
+է implementation-ին զուգահեռ։
 
 ## Անփոփոխ նախագծային պայմանագրեր
 
@@ -141,14 +148,14 @@ integration test-ով։ Դաշտերը հասցեագրվում են typed GEP-�
 ### Builtin-ների ինքնությունը
 
 Semantic analyzer-ը ճանաչում է `Print`, `Input`, `NUM`, `SQR`, `STR` և `LEN`
-builtin-ները, ներառյալ `STR(BOOL)` և `LEN(TEXT|array)` տարբերակները։ Մինչև
-builtin lowering-ը `SubroutineSymbol::builtin` boolean-ը պետք է փոխարինել
-`BuiltinKind`-ով, որպեսզի codegen-ը գործողությունն ընտրի semantic identity-ով,
-ոչ անվան տողը համեմատելով։
+builtin-ները, ներառյալ `STR(BOOL)` և `LEN(TEXT|array)` տարբերակները։ Անունները
+վերապահված են, իսկ կանչը `SymbolId`-ով կապվում է `SubroutineSymbol`-ին։ Այդ
+symbol-ի `builtin` դրոշն ու canonical անունը բավարար են lowering-ի ընտրության
+համար, ուստի նույն տեղեկությունը կրկնող առանձին enum չի պահվում։
 
-## Մնացած իրականացման փուլերը
+## Իրականացման փուլերը
 
-### Փուլ 1․ target layout և `RuntimeAbi`
+### Փուլ 1․ target layout և `RuntimeAbi` (ավարտված)
 
 - Module-ի target triple-ի հետ սահմանել ճիշտ data layout-ը։
 - Իրականացնել `RuntimeAbi`-ն՝ `%avium.text` type-ով և բոլոր
@@ -156,8 +163,7 @@ builtin lowering-ը `SubroutineSymbol::builtin` boolean-ը պետք է փոխա�
 - `DataLayout`-ից ստանալ `size_t`-ի LLVM type-ը և `%avium.text`-ի layout-ը։
 - Ավելացնել C/LLVM ABI integration test՝ field offset-ների, struct size-ի և
   alignment-ի համար։
-- `SubroutineSymbol`-ում ավելացնել `BuiltinKind` և թեստերով ամրագրել builtin
-  identity-ն։
+- Թեստերով ամրագրել builtin անունների վերապահված լինելը և signature-ները։
 
 ### Փուլ 2․ subroutine frame և storage
 
@@ -211,8 +217,8 @@ builtin lowering-ը `SubroutineSymbol::builtin` boolean-ը պետք է փոխա�
 
 - Text `&`, `=`, `<>`, `<`, `<=`, `>` և `>=` գործողությունները իջեցնել runtime
   կանչերի։ Համեմատությունը բովանդակությամբ է, ոչ pointer-ով։
-- `BuiltinKind`-ով իջեցնել `Print`, `Input`, `NUM`, `SQR`, `STR` և `LEN(TEXT)`
-  builtin-ները՝ անհրաժեշտ runtime կանչերին source line փոխանցելով։
+- Լուծված builtin symbol-ով իջեցնել `Print`, `Input`, `NUM`, `SQR`, `STR` և
+  `LEN(TEXT)` builtin-ները՝ անհրաժեշտ runtime կանչերին source line փոխանցելով։
 - Իրականացնել text `LET`, argument, return և temporary ownership-ի copy/move
   կանոնները։
 - Cleanup-ում ոչնչացնել բոլոր owned text local-ներն ու temporary-ները։

@@ -34,7 +34,11 @@ TEST_CASE("IR code generator emits an empty Main and a C entry point", "[ircodeg
 
     REQUIRE(module != nullptr);
     CHECK(module->getTargetTriple().str() == llvm::sys::getDefaultTargetTriple());
+    CHECK_FALSE(module->getDataLayout().isDefault());
     CHECK_FALSE(llvm::verifyModule(*module));
+    CHECK(module->getFunction("avium_text_create") != nullptr);
+    CHECK(module->getFunction("avium_array_create") != nullptr);
+    CHECK(module->getFunction("avium_sqr") != nullptr);
 
     auto* cMain = module->getFunction("main");
     REQUIRE(cMain != nullptr);

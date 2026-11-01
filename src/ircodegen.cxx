@@ -10,10 +10,16 @@
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/MC/TargetRegistry.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/TargetSelect.h>
+#include <llvm/Target/TargetMachine.h>
+#include <llvm/Target/TargetOptions.h>
 #include <llvm/TargetParser/Host.h>
 #include <llvm/TargetParser/Triple.h>
 
+#include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -46,7 +52,9 @@ IRCodeGen::IRCodeGen(llvm::LLVMContext& context, Program& program, const SymbolT
 std::expected<std::unique_ptr<llvm::Module>, Error> IRCodeGen::generate()
 {
     _module = std::make_unique<llvm::Module>("prunus", _context);
-    _module->setTargetTriple(llvm::Triple{llvm::sys::getDefaultTargetTriple()});
+    if( auto result = configureTarget(); !result )
+        return std::unexpected(std::move(result.error()));
+    _runtime = std::make_unique<RuntimeAbi>(*_module);
 
     declareSubroutines();
     if( auto result = emitSubroutines(); !result ) {
@@ -67,6 +75,28 @@ std::expected<std::unique_ptr<llvm::Module>, Error> IRCodeGen::generate()
     }
 
     return std::move(_module);
+}
+
+std::expected<void, Error> IRCodeGen::configureTarget()
+{
+    if( llvm::InitializeNativeTarget() )
+        return std::unexpected(Error{_program.line, "IR code generation could not initialize the native target"});
+
+    const llvm::Triple triple{llvm::sys::getDefaultTargetTriple()};
+    std::string targetError;
+    const auto* target = llvm::TargetRegistry::lookupTarget(triple, targetError);
+    if( target == nullptr )
+        return std::unexpected(Error{_program.line, "IR code generation could not find the native target: " + targetError});
+
+    llvm::TargetOptions options;
+    std::unique_ptr<llvm::TargetMachine> targetMachine{
+        target->createTargetMachine(triple, llvm::sys::getHostCPUName(), "", options, std::nullopt)};
+    if( targetMachine == nullptr )
+        return std::unexpected(Error{_program.line, "IR code generation could not create the native target machine"});
+
+    _module->setTargetTriple(triple);
+    _module->setDataLayout(targetMachine->createDataLayout());
+    return {};
 }
 
 void IRCodeGen::declareSubroutines()
