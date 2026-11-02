@@ -99,10 +99,12 @@ program.bas --> prunus --> program.ll --> LLVM --> program.o
 program.o + avium runtime --> կապակցում --> program
 ```
 
-Պրոյեկտի ներկա տարբերակում այս ճանապարհն իրականացված է մինչև սեմանտիկ
-վերլուծությունը։ LLVM IR-ի փոխարեն `prunus` ծրագիրն առայժմ արտածում է AST-ի
-Lisp ներկայացումը։ Այդ միջանկյալ արդյունքով կարելի է ստուգել frontend-ի
-աշխատանքը՝ դեռևս չունենալով կոդի գեներատոր։
+Ներկա կոդում scanner-ը, parser-ը, սեմանտիկ վերլուծությունն ու LLVM IR
+գեներատորի կմախքն առկա են։ `prunus`-ը հաջող վերլուծությունից հետո փորձում է
+արտածել LLVM IR։ Գեներատորը ստուգում է մոդուլը LLVM verifier-ով, բայց դեռ չի
+աջակցում ծրագրի հրամանների ու արտահայտությունների արտածմանը. այդ պատճառով
+ոչ դատարկ ծրագրերի մշակումը կարող է ավարտվել կոդի գեներացման սխալով։ `AstLisp`
+դասը մնում է AST-ն ստուգելու օժանդակ միջոց։
 
 
 ## Բառային վերլուծություն
@@ -403,11 +405,17 @@ if( diagnostics.count() != 0 )
 
 SymbolTable symbols;
 SemanticModel model;
-SemanticAnalyzer analyzer{symbols, model, diagnostics};
+SemanticContext semanticContext{symbols, model, diagnostics};
+SemanticAnalyzer analyzer{semanticContext};
 if( !analyzer.analyze(*program) )
     return failure;
 
-AstLisp{}.emit(*program, output);
+llvm::LLVMContext context;
+IRCodeGen codeGenerator{context, *program, symbols, model};
+auto module = codeGenerator.generate();
+if( !module )
+    return failure;
+(*module)->print(llvm::outs(), nullptr);
 ```
 
 Նկատենք, որ driver-ը scanner-ի համար առանձին ցիկլ չի կազմակերպում։ Parser-ն
@@ -427,8 +435,7 @@ Parser-ի սխալից հետո սեմանտիկ վերլուծիչը չի գո�
 example.bas:7: 'radius' անունով փոփոխական սահմանված չէ։
 ```
 
-LLVM գեներատորն իրականացնելուց հետո driver-ի վերջին քայլում `AstLisp`-ի հետ
-կամ դրա փոխարեն կստեղծվի LLVM IR ներկայացումը։
+LLVM գեներատորը կառուցում ու ստուգում է LLVM մոդուլը։
 
 
 ## Պրոյեկտի կառուցվածքը

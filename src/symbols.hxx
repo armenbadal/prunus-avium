@@ -38,16 +38,14 @@ struct Symbol {
 };
 
 struct VariableSymbol final : Symbol {
-    VariableSymbol(std::string name, const Type& type,
-        VariableStorage storage = VariableStorage::Local);
+    VariableSymbol(std::string name, const Type& type, VariableStorage storage = VariableStorage::Local);
 
     const Type* type;
     VariableStorage storage{VariableStorage::Local};
 };
 
 struct SubroutineSymbol final : Symbol {
-    SubroutineSymbol(std::string name, SubroutineSignature signature,
-        bool builtin = false);
+    SubroutineSymbol(std::string name, SubroutineSignature signature, bool builtin = false);
 
     SubroutineSignature signature;
     bool builtin{false};
@@ -71,24 +69,24 @@ public:
     // վերադառնալ նախորդ անունների տիրույթին
     bool closeScope();
 
-    SymbolId declareVariable(std::string name, const Type& type, VariableStorage storage = VariableStorage::Local);
+    SymbolId declareVariable(VariableSymbol symbol);
     SymbolId declareSubroutine(SubroutineSymbol symbol);
 
-    [[nodiscard]] std::optional<SymbolId> lookup(std::string_view name) const;
-    [[nodiscard]] std::optional<SymbolId> lookupSubroutine(std::string_view name) const;
-    [[nodiscard]] bool declaredInCurrentScope(std::string_view name) const;
+    std::optional<SymbolId> lookup(std::string_view name) const;
+    std::optional<SymbolId> lookupSubroutine(std::string_view name) const;
+    bool declaredInCurrentScope(std::string_view name) const;
 
-    [[nodiscard]] const Symbol& symbol(SymbolId id) const;
-    [[nodiscard]] const VariableSymbol* variable(SymbolId id) const;
-    [[nodiscard]] const SubroutineSymbol* subroutine(SymbolId id) const;
-    [[nodiscard]] std::size_t size() const noexcept;
+    const Symbol& symbol(SymbolId id) const;
+    const VariableSymbol* variable(SymbolId id) const;
+    const SubroutineSymbol* subroutine(SymbolId id) const;
+    std::size_t size() const noexcept;
 
 private:
     // անունների տիրույթը որպես արտապատկերում
     using Scope = std::unordered_map<std::string, SymbolId>;
 
     SymbolId insert(SymbolValue symbol, Scope& scope);
-    [[nodiscard]] const SymbolValue& symbolValue(SymbolId id) const;
+    const SymbolValue& symbolValue(SymbolId id) const;
 
     std::vector<SymbolValue> _symbols;
     std::vector<Scope> _scopes;

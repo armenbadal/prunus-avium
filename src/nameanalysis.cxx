@@ -33,8 +33,7 @@ class NameDeclarationPass {
 public:
     explicit NameDeclarationPass(SemanticContext& context)
         : _context{context}
-    {
-    }
+    {}
 
     void declareGlobals(const Program& program) const;
     void declareLocals(const Subroutine& subroutine);
@@ -132,7 +131,8 @@ void NameDeclarationPass::resolveEntryPoint(const Program& program) const
 void NameDeclarationPass::declareParameters(const Subroutine& subroutine) const
 {
     for( const auto& parameter : subroutine._parameters ) {
-        const auto id = _context.symbols.declareVariable(parameter->_name, *parameter->_type, VariableStorage::Parameter);
+        VariableSymbol var{parameter->_name, *parameter->_type, VariableStorage::Parameter};
+        const auto id = _context.symbols.declareVariable(var);
         if( id == UnknownSymbol )
             _context.report(*parameter, std::format("'{}' անունն արդեն սահմանված է այս ենթածրագրում։", parameter->_name));
         else
@@ -172,7 +172,8 @@ void NameDeclarationPass::declareLocals(const Sequence& sequence)
 
 void NameDeclarationPass::declareDim(const Dim& dim) const
 {
-    const auto id = _context.symbols.declareVariable(dim._name, *dim._type, VariableStorage::Local);
+    VariableSymbol var{dim._name, *dim._type, VariableStorage::Local};
+    const auto id = _context.symbols.declareVariable(var);
     if( id == UnknownSymbol )
         _context.report(dim, std::format("'{}' անունն արդեն սահմանված է այս ենթածրագրում։", dim._name));
     else
@@ -192,7 +193,8 @@ void NameDeclarationPass::declareForVariable(const For& loop) const
         return;
     }
 
-    const auto id = _context.symbols.declareVariable(name, scalarType(ScalarType::Name::Real), VariableStorage::ForVariable);
+    VariableSymbol var{name, scalarType(ScalarType::Name::Real), VariableStorage::ForVariable};
+    const auto id = _context.symbols.declareVariable(var);
     _context.model.bind(loop._parameter->id(), id);
 }
 
@@ -204,149 +206,159 @@ public:
     {
     }
 
-    void resolve(const Subroutine& subroutine);
+    void resolve(const Subroutine& subroutine)
+    {
+        resolve(*subroutine._body);
+    }
 
 private:
-    void resolve(const Sequence& sequence);
-    void resolve(const Statement& statement);
-    void resolve(const IfBranch& branch);
-    void resolve(const Expression& expression);
+    void resolve(const Sequence& sequence)
+    {
+        for( const auto& statement : sequence._items )
+            resolve(*statement);
+    }
 
-    void resolveVariable(const Variable& variable) const;
-    void resolveSubroutine(const Node& node, std::string_view name) const;
+    void resolve(const Statement& statement)
+    {
+        switch( statement.kind ) {
+            case NodeKind::Dim:
+                resolve(dynamic_cast<const Dim&>(statement));
+                break;
+            case NodeKind::Let:
+                resolve(dynamic_cast<const Let&>(statement));
+                break;
+            case NodeKind::If:
+                resolve(dynamic_cast<const If&>(statement));
+                break;
+            case NodeKind::While:
+                resolve(dynamic_cast<const While&>(statement));
+                break;
+            case NodeKind::For:
+                resolve(dynamic_cast<const For&>(statement));
+                break;
+            case NodeKind::Call:
+                resolve(dynamic_cast<const Call&>(statement));
+                break;
+            case NodeKind::Return:
+                resolve(dynamic_cast<const Return&>(statement));
+                return;
+            default:
+                std::unreachable();
+        }
+    }
+
+    void resolve(const Dim& dim)
+    {
+        if( dim._type->isArray() ) {
+            const auto& array = dynamic_cast<const ArrayType&>(*dim._type);
+            if( array._size )
+                resolve(*array._size);
+        }
+    }
+
+    void resolve(const Let& let)
+    {
+        resolve(*let._variable);
+        if( let._index )
+            resolve(*let._index);
+        resolve(*let._value);
+    }
+
+    void resolve(const If& conditional)
+    {
+        for( const auto& branch : conditional._branches )
+            resolve(*branch);
+        if( conditional._alternative )
+            resolve(*conditional._alternative);
+    }
+
+    void resolve(const While& loop)
+    {
+        resolve(*loop._condition);
+        resolve(*loop._body);
+    }
+
+    void resolve(const For& loop)
+    {
+        resolve(*loop._parameter);
+        resolve(*loop._begin);
+        resolve(*loop._end);
+        resolve(*loop._step);
+        resolve(*loop._body);
+    }
+
+    void resolve(const Call& call)
+    {
+        resolveSubroutine(call, call._callee);
+        for( const auto& argument : call._arguments )
+            resolve(*argument);
+    }
+
+    void resolve(const Return& ret)
+    {
+        resolve(*ret._value);
+    }
+
+    void resolve(const IfBranch& branch)
+    {
+        resolve(*branch._condition);
+        resolve(*branch._body);
+    }
+
+    void resolve(const Expression& expression)
+    {
+        switch( expression.kind ) {
+            case NodeKind::Boolean:
+            case NodeKind::Number:
+            case NodeKind::Text:
+                break;
+            case NodeKind::Variable: {
+                const auto& variable = dynamic_cast<const Variable&>(expression);
+                const auto id = _context.symbols.lookup(variable._name);
+                if( !id ) {
+                    _context.report(variable, std::format("'{}' անունով փոփոխական սահմանված չէ։", variable._name));
+                    break;
+                }
+                if( _context.symbols.variable(*id) == nullptr ) {
+                    _context.report(variable, std::format("'{}' անունը փոփոխական չէ։", variable._name));
+                    break;
+                }
+                _context.model.bind(variable.id(), *id);
+                break;
+            }
+            case NodeKind::Unary:
+                resolve(*dynamic_cast<const Unary&>(expression)._operand);
+                break;
+            case NodeKind::Binary: {
+                const auto& binary = dynamic_cast<const Binary&>(expression);
+                resolve(*binary._left);
+                resolve(*binary._right);
+                break;
+            }
+            case NodeKind::Apply: {
+                const auto& apply = dynamic_cast<const Apply&>(expression);
+                resolveSubroutine(apply, apply._callee);
+                for( const auto& argument : apply._arguments )
+                    resolve(*argument);
+                break;
+            }
+            default:
+                std::unreachable();
+        }
+    }
+
+    void resolveSubroutine(const Node& node, std::string_view name) const
+    {
+        const auto id = _context.symbols.lookupSubroutine(name);
+        if( !id ) {
+            _context.report(node, std::format("'{}' անունով ենթածրագիր սահմանված չէ։", name));
+            return;
+        }
+        _context.model.bind(node.id(), *id);
+    }
 
     SemanticContext& _context;
 };
-
-void NameResolutionPass::resolve(const Subroutine& subroutine)
-{
-    resolve(*subroutine._body);
-}
-
-void NameResolutionPass::resolve(const Sequence& sequence)
-{
-    for( const auto& statement : sequence._items )
-        resolve(*statement);
-}
-
-void NameResolutionPass::resolve(const Statement& statement)
-{
-    switch( statement.kind ) {
-        case NodeKind::Dim: {
-            if( const auto& dim = dynamic_cast<const Dim&>(statement); dim._type->isArray() ) {
-                if( const auto& array = dynamic_cast<const ArrayType&>(*dim._type); array._size )
-                    resolve(*array._size);
-            }
-            return;
-        }
-        case NodeKind::Let: {
-            const auto& let = dynamic_cast<const Let&>(statement);
-            resolve(*let._variable);
-            if( let._index )
-                resolve(*let._index);
-            resolve(*let._value);
-            return;
-        }
-        case NodeKind::If: {
-            const auto& conditional = dynamic_cast<const If&>(statement);
-            for( const auto& branch : conditional._branches )
-                resolve(*branch);
-            if( conditional._alternative )
-                resolve(*conditional._alternative);
-            return;
-        }
-        case NodeKind::While: {
-            const auto& loop = dynamic_cast<const While&>(statement);
-            resolve(*loop._condition);
-            resolve(*loop._body);
-            return;
-        }
-        case NodeKind::For: {
-            const auto& loop = dynamic_cast<const For&>(statement);
-            resolve(*loop._parameter);
-            resolve(*loop._begin);
-            resolve(*loop._end);
-            resolve(*loop._step);
-            resolve(*loop._body);
-            return;
-        }
-        case NodeKind::Call: {
-            const auto& call = dynamic_cast<const Call&>(statement);
-            resolveSubroutine(call, call._callee);
-            for( const auto& argument : call._arguments )
-                resolve(*argument);
-            return;
-        }
-        case NodeKind::Return:
-            resolve(*dynamic_cast<const Return&>(statement)._value);
-            return;
-        default:
-            std::unreachable();
-    }
-}
-
-void NameResolutionPass::resolve(const IfBranch& branch)
-{
-    resolve(*branch._condition);
-    resolve(*branch._body);
-}
-
-void NameResolutionPass::resolve(const Expression& expression)
-{
-    switch( expression.kind ) {
-        case NodeKind::Boolean:
-        case NodeKind::Number:
-        case NodeKind::Text:
-            break;
-        case NodeKind::Variable:
-            resolveVariable(dynamic_cast<const Variable&>(expression));
-            break;
-        case NodeKind::Unary:
-            resolve(*dynamic_cast<const Unary&>(expression)._operand);
-            break;
-        case NodeKind::Binary: {
-            const auto& binary = dynamic_cast<const Binary&>(expression);
-            resolve(*binary._left);
-            resolve(*binary._right);
-            break;
-        }
-        case NodeKind::Apply: {
-            const auto& apply = dynamic_cast<const Apply&>(expression);
-            resolveSubroutine(apply, apply._callee);
-            for( const auto& argument : apply._arguments )
-                resolve(*argument);
-            break;
-        }
-        default:
-            std::unreachable();
-    }
-}
-
-void NameResolutionPass::resolveVariable(const Variable& variable) const
-{
-    const auto id = _context.symbols.lookup(variable._name);
-    if( !id ) {
-        _context.report(variable, std::format("'{}' անունով փոփոխական սահմանված չէ։", variable._name));
-        return;
-    }
-
-    if( _context.symbols.variable(*id) == nullptr ) {
-        _context.report(variable, std::format("'{}' անունը փոփոխական չէ։", variable._name));
-        return;
-    }
-
-    _context.model.bind(variable.id(), *id);
-}
-
-void NameResolutionPass::resolveSubroutine(const Node& node, std::string_view name) const
-{
-    const auto id = _context.symbols.lookupSubroutine(name);
-    if( !id ) {
-        _context.report(node, std::format("'{}' անունով ենթածրագիր սահմանված չէ։", name));
-        return;
-    }
-    _context.model.bind(node.id(), *id);
-}
 
 } // namespace
 

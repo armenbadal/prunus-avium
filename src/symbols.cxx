@@ -60,9 +60,9 @@ SymbolId SymbolTable::insert(SymbolValue symbol, Scope& scope)
     return id;
 }
 
-SymbolId SymbolTable::declareVariable(std::string name, const Type& type, VariableStorage storage)
+SymbolId SymbolTable::declareVariable(VariableSymbol symbol)
 {
-    return insert(VariableSymbol{std::move(name), type, storage}, _scopes.back());
+    return insert(std::move(symbol), _scopes.back());
 }
 
 SymbolId SymbolTable::declareSubroutine(SubroutineSymbol symbol)

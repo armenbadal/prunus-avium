@@ -17,9 +17,9 @@ public:
     void setEntryPoint(SymbolId symbol);
     void setType(NodeId node, const Type& type);
 
-    [[nodiscard]] std::optional<SymbolId> symbol(NodeId node) const;
-    [[nodiscard]] std::optional<SymbolId> entryPoint() const;
-    [[nodiscard]] const Type* type(NodeId node) const;
+    std::optional<SymbolId> symbol(NodeId node) const;
+    std::optional<SymbolId> entryPoint() const;
+    const Type* type(NodeId node) const;
 
 private:
     std::unordered_map<NodeId, SymbolId> _symbols;
